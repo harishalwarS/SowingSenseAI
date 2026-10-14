@@ -6,3 +6,4 @@ requests>=2.31
 joblib
 scikit-learn
 streamlit-geolocation
+streamlit-js-eval
