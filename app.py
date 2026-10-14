@@ -8,13 +8,10 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import requests
 import streamlit as st
+import streamlit.components.v1 as components
 from plotly.subplots import make_subplots
-
-try:  # pip install streamlit-geolocation
-    from streamlit_geolocation import streamlit_geolocation
-except ImportError:
-    streamlit_geolocation = None
 
 DATA_DIR = Path(__file__).parent / "Data"
 WEATHER_FEATURES_PATH = DATA_DIR / "sowing_window_features.csv"
@@ -24,11 +21,11 @@ MODEL_PATH = Path(__file__).parent / "sowing_model_demo.joblib"
 st.set_page_config(page_title="SowingSense AI", page_icon="🌱", layout="wide", initial_sidebar_state="collapsed")
 
 # =====================================================================
-# THEME / CSS
+# THEME / CSS (100% ORIGINAL DESIGN PRESERVED + SINGLE-LINE TOP NAV)
 # =====================================================================
 CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+Tamil:wght@400;500;600;700;800;900&display=swap');
 :root{
   --g:#65e6a0; --g2:#22c55e; --blue:#4cc9f0; --amber:#f5c04a; --red:#ff7b72;
   --line:rgba(101,230,160,.20); --muted:#9bb8b0; color-scheme:dark;
@@ -41,7 +38,7 @@ html{scroll-behavior:smooth;}
     linear-gradient(135deg,#050f18 0%,#09202a 55%,#0a2822 100%);
   color:#e8f5ee;
 }
-.stApp, .stApp p, .stApp label, .stApp li, .stApp h1, .stApp h2, .stApp h3, .stApp h4{font-family:'Inter',system-ui,sans-serif;}
+.stApp, .stApp p, .stApp label, .stApp li, .stApp h1, .stApp h2, .stApp h3, .stApp h4{font-family:'Inter','Noto Sans Tamil',system-ui,sans-serif;}
 .main .block-container{max-width:1500px;padding:1rem 2rem 4rem;}
 header[data-testid="stHeader"]{background:transparent;}
 #MainMenu, footer{visibility:hidden;}
@@ -50,24 +47,15 @@ p,label,.stMarkdown{color:#d4e6df;}
 hr{border-color:var(--line);margin:1.4rem 0;}
 ::-webkit-scrollbar{width:10px;} ::-webkit-scrollbar-track{background:#06131c;}
 ::-webkit-scrollbar-thumb{background:linear-gradient(#1c8f58,#65e6a0);border-radius:10px;}
+iframe[height="0"]{display:none !important;height:0 !important;width:0 !important;border:none !important;}
+div:has(> iframe[height="0"]){display:none !important;margin:0 !important;padding:0 !important;}
 
-/* ---------- Sidebar ---------- */
-[data-testid="stSidebar"]{background:linear-gradient(180deg,#06121b 0%,#081f1e 100%);border-right:1px solid var(--line);box-shadow:8px 0 40px rgba(34,197,94,.06);}
-[data-testid="stSidebar"] [role="radiogroup"]{gap:6px;}
-[data-testid="stSidebar"] [role="radiogroup"] label{
-  border-radius:12px;padding:11px 14px;width:100%;border:1px solid transparent;
-  background:rgba(255,255,255,.015);transition:all .22s ease;}
-[data-testid="stSidebar"] [role="radiogroup"] label > div:first-child{display:none;}
-[data-testid="stSidebar"] [role="radiogroup"] label:hover{background:rgba(101,230,160,.10);transform:translateX(5px);border-color:rgba(101,230,160,.35);}
-[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked){
-  background:linear-gradient(135deg,#1a9a5c,#22c55e);border-color:#6ff0ae;
-  box-shadow:0 0 22px rgba(34,197,94,.45), inset 0 0 12px rgba(255,255,255,.12);}
-[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) p{color:#fff !important;font-weight:800;}
-.brand{display:flex;align-items:center;gap:10px;padding:6px 4px 16px;}
-.brand .logo{font-size:1.9rem;filter:drop-shadow(0 0 10px rgba(101,230,160,.8));}
-.brand .name{font-size:1.35rem;font-weight:900;color:#fff;letter-spacing:-.3px;}
+/* ---------- Brand ---------- */
+.brand{display:flex;align-items:center;gap:10px;padding:4px 2px;}
+.brand .logo{font-size:1.85rem;filter:drop-shadow(0 0 10px rgba(101,230,160,.8));}
+.brand .name{font-size:1.3rem;font-weight:900;color:#fff;letter-spacing:-.3px;white-space:nowrap;}
 .brand .name b{color:var(--g);text-shadow:0 0 14px rgba(101,230,160,.7);}
-.brand .tag{font-size:.68rem;color:#a9c8bd;letter-spacing:.4px;}
+.brand .tag{font-size:.66rem;color:#a9c8bd;letter-spacing:.3px;white-space:nowrap;}
 
 /* ---------- Hero ---------- */
 .hero{position:relative;overflow:hidden;border-radius:26px;padding:clamp(22px,3vw,38px) clamp(20px,3vw,36px);
@@ -182,7 +170,7 @@ div[data-testid="stVerticalBlockBorderWrapper"]:hover{
 
 /* main-area radios become glowing segmented pills */
 .main [data-testid="stRadio"] [role="radiogroup"]{flex-direction:row;flex-wrap:wrap;gap:6px;}
-.main [data-testid="stRadio"] label{border-radius:10px;padding:6px 16px;background:rgba(255,255,255,.04);border:1px solid rgba(101,230,160,.2);transition:all .2s ease;}
+.main [data-testid="stRadio"] label{border-radius:10px;padding:6px 14px;background:rgba(255,255,255,.04);border:1px solid rgba(101,230,160,.2);transition:all .2s ease;}
 .main [data-testid="stRadio"] label > div:first-child{display:none;}
 .main [data-testid="stRadio"] label:hover{border-color:#65e6a0;box-shadow:0 0 14px rgba(101,230,160,.3);}
 .main [data-testid="stRadio"] label:has(input:checked){background:linear-gradient(135deg,#15803d,#22c55e);border-color:#7dffb5;box-shadow:0 0 18px rgba(34,197,94,.5);}
@@ -202,20 +190,50 @@ div[data-testid="stVerticalBlockBorderWrapper"]:hover{
 .kicker{color:var(--g);font-size:.74rem;text-transform:uppercase;letter-spacing:1.6px;font-weight:800;}
 .small-note{color:var(--muted);font-size:.86rem;}
 
-
-/* ---------- Top navigation (replaces sidebar) ---------- */
+/* ---------- Fixed, aligned top navigation ---------- */
 [data-testid="stSidebar"],[data-testid="stSidebarCollapsedControl"],[data-testid="collapsedControl"]{display:none !important;}
-.st-key-topnav{position:sticky;top:.6rem;z-index:999;background:rgba(6,19,28,.88);backdrop-filter:blur(16px);
-  border:1px solid rgba(101,230,160,.30);border-radius:18px;padding:10px 18px;margin-bottom:16px;
-  box-shadow:0 0 34px rgba(34,197,94,.16),0 10px 30px rgba(0,0,0,.35);animation:rise .5s ease both;}
-.st-key-topnav [data-testid="stRadio"] [role="radiogroup"]{gap:8px;justify-content:flex-end;}
-.st-key-topnav [data-testid="stRadio"] label{padding:9px 15px;border-radius:12px;}
-.st-key-topnav [data-testid="stRadio"] label p{font-size:.86rem;white-space:nowrap;font-weight:700;}
-.st-key-topnav [data-testid="stRadio"] label:hover{transform:translateY(-3px) scale(1.04);}
-.st-key-topnav [data-testid="stRadio"] label:has(input:checked){box-shadow:0 0 26px rgba(34,197,94,.75),inset 0 0 12px rgba(255,255,255,.18);}
-.st-key-topnav .brand{padding:2px 0;}
+.st-key-topnav{position:sticky;top:.6rem;z-index:999;background:rgba(6,19,28,.94);backdrop-filter:blur(16px);
+  border:1px solid rgba(101,230,160,.30);border-radius:18px;padding:10px 14px;margin:0 0 18px;
+  box-shadow:0 0 28px rgba(34,197,94,.13),0 10px 28px rgba(0,0,0,.30);}
+.st-key-topnav [data-testid="stHorizontalBlock"]{align-items:center !important;gap:10px !important;}
+.st-key-topnav [data-testid="column"]{min-width:0 !important;display:flex;justify-content:center;}
+.st-key-topnav [data-testid="column"]:first-child{justify-content:flex-start;}
+.st-key-topnav .brand{padding:0;min-width:0;}
+.st-key-topnav .brand .name{font-size:clamp(.95rem,1.1vw,1.25rem);}
+.st-key-topnav .brand .tag{font-size:.62rem;}
+.st-key-topnav [data-testid="stRadio"]{width:100%;min-width:0;}
+.st-key-topnav [data-testid="stRadio"] [role="radiogroup"]{display:flex !important;align-items:center !important;justify-content:center !important;gap:5px !important;flex-wrap:nowrap !important;width:100%;}
+.st-key-topnav [data-testid="stRadio"] [role="radiogroup"] > label{display:flex !important;align-items:center !important;justify-content:center !important;
+  flex:0 1 auto !important;min-width:0 !important;margin:0 !important;padding:8px 9px !important;border-radius:10px !important;
+  white-space:nowrap !important;background:transparent;border:1px solid transparent;}
+/* Hide Streamlit radio circles without hiding the option text */
+.st-key-topnav [data-testid="stRadio"] [role="radiogroup"] > label > div:first-child,
+.st-key-topnav [data-testid="stRadio"] [role="radiogroup"] > label input,
+.st-key-topnav [data-testid="stRadio"] [role="radiogroup"] > label svg{display:none !important;width:0 !important;margin:0 !important;}
+.st-key-topnav [data-testid="stRadio"] [role="radiogroup"] > label p{font-size:clamp(.70rem,.78vw,.82rem) !important;line-height:1.2 !important;white-space:nowrap !important;font-weight:750 !important;margin:0 !important;}
+.st-key-topnav [data-testid="stRadio"] [role="radiogroup"] > label:hover{border-color:rgba(101,230,160,.45);background:rgba(101,230,160,.08);}
+.st-key-topnav [data-testid="stRadio"] [role="radiogroup"] > label:has(input:checked){background:linear-gradient(135deg,#15803d,#22c55e) !important;border-color:#7dffb5 !important;box-shadow:0 0 14px rgba(34,197,94,.32);}
+.st-key-topnav [data-testid="stRadio"] [role="radiogroup"] > label:has(input:checked) p{color:#fff !important;}
+.st-key-topnav [data-testid="stRadio"] > label,.st-key-topnav [data-testid="stSelectbox"] > label{display:none !important;}
+.st-key-topnav [data-testid="stSelectbox"]{width:100%;min-width:0;}
+.st-key-topnav [data-baseweb="select"] > div{min-height:40px !important;background:rgba(255,255,255,.045) !important;
+  border-radius:11px !important;border:1px solid rgba(101,230,160,.28) !important;font-size:.78rem !important;font-weight:700 !important;}
+.st-key-topnav [data-testid="stSelectbox"] [data-testid="stMarkdownContainer"] p{font-size:.78rem !important;}
 .foot{text-align:center;color:#7fa196;font-size:.78rem;margin-top:2.5rem;padding-top:1rem;border-top:1px solid rgba(101,230,160,.14);}
-@media (max-width:900px){.st-key-topnav{position:relative;top:0;}}
+@media (max-width:1450px){
+  .st-key-topnav{position:relative;top:0;padding:10px 12px;}
+  .st-key-topnav [data-testid="stHorizontalBlock"]{flex-wrap:wrap !important;}
+  .st-key-topnav [data-testid="column"]{flex:1 1 auto !important;}
+  .st-key-topnav [data-testid="column"]:first-child{flex:1 1 220px !important;}
+  .st-key-topnav [data-testid="column"]:nth-child(2){flex:3 1 500px !important;}
+  .st-key-topnav [data-testid="column"]:nth-child(3){flex:0 1 170px !important;}
+  .st-key-topnav [data-testid="column"]:nth-child(4){flex:0 1 145px !important;}
+  .st-key-topnav [data-testid="stRadio"] [role="radiogroup"]{flex-wrap:wrap !important;}
+}
+@media (max-width:768px){
+  .st-key-topnav [data-testid="column"]:nth-child(2){flex-basis:100% !important;}
+  .st-key-topnav [data-testid="column"]:nth-child(3),.st-key-topnav [data-testid="column"]:nth-child(4){flex:1 1 130px !important;}
+}
 
 @keyframes rise{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
 @keyframes grow{from{width:0;}}
@@ -233,6 +251,194 @@ st.markdown(CSS, unsafe_allow_html=True)
 
 GREEN, AMBER, RED = "#65e6a0", "#f5c04a", "#ff7b72"
 PALETTE = ["#65e6a0", "#4cc9f0", "#f5c04a", "#c084fc", "#ff7b72"]
+
+# =====================================================================
+# LANGUAGE, ALL 38 DISTRICTS (EXACT CITY CENTERS), 20 CROPS & GPS
+# =====================================================================
+if "lang" not in st.session_state:
+    st.session_state["lang"] = "en"
+
+
+def is_ta():
+    return st.session_state.get("lang", "en") == "ta"
+
+
+def L(en_text, ta_text):
+    return ta_text if is_ta() else en_text
+
+
+LIVE_LOC_KEY = "📍 Live Location (GPS)"
+
+DISTRICTS = {
+    LIVE_LOC_KEY: (8.8053, 78.1453),
+    "Ariyalur": (11.1401, 79.0786), "Chengalpattu": (12.6819, 79.9888), "Chennai": (13.0827, 80.2707),
+    "Coimbatore": (11.0168, 76.9558), "Cuddalore": (11.7480, 79.7714), "Dharmapuri": (12.1211, 78.1582),
+    "Dindigul": (10.3624, 77.9695), "Erode": (11.3410, 77.7172), "Kallakurichi": (11.7384, 78.9639),
+    "Kanchipuram": (12.8342, 79.7036), "Kanniyakumari": (8.0883, 77.5385), "Karur": (10.9601, 78.0766),
+    "Krishnagiri": (12.5186, 78.2137), "Madurai": (9.9252, 78.1198), "Mayiladuthurai": (11.1018, 79.6526),
+    "Nagapattinam": (10.7672, 79.8449), "Namakkal": (11.2189, 78.1674), "Nilgiris": (11.4102, 76.6950),
+    "Perambalur": (11.2342, 78.8807), "Pudukkottai": (10.3797, 78.8208), "Ramanathapuram": (9.3639, 78.8395),
+    "Ranipet": (12.9272, 79.3330), "Salem": (11.6643, 78.1460), "Sivaganga": (9.8433, 78.4809),
+    "Tenkasi": (8.9594, 77.3161), "Thanjavur": (10.7870, 79.1378), "Theni": (10.0104, 77.4768),
+    "Thoothukudi": (8.8053, 78.1453), "Tiruchirappalli": (10.7905, 78.7047), "Tirunelveli": (8.7139, 77.7567),
+    "Tirupathur": (12.4950, 78.5678), "Tiruppur": (11.1085, 77.3411), "Tiruvallur": (13.1430, 79.9120),
+    "Tiruvannamalai": (12.2253, 79.0747), "Tiruvarur": (10.7661, 79.6344), "Vellore": (12.9165, 79.1325),
+    "Viluppuram": (11.9401, 79.4861), "Virudhunagar": (9.5680, 77.9624),
+}
+
+DISTRICT_TA = {
+    LIVE_LOC_KEY: "📍 நேரடி இருப்பிடம் (GPS)",
+    "Ariyalur": "அரியலூர்", "Chengalpattu": "செங்கல்பட்டு", "Chennai": "சென்னை", "Coimbatore": "கோயம்புத்தூர்",
+    "Cuddalore": "கடலூர்", "Dharmapuri": "தர்மபுரி", "Dindigul": "திண்டுக்கல்", "Erode": "ஈரோடு",
+    "Kallakurichi": "கள்ளக்குறிச்சி", "Kanchipuram": "காஞ்சிபுரம்", "Kanniyakumari": "கன்னியாகுமரி", "Karur": "கரூர்",
+    "Krishnagiri": "கிருஷ்ணகிரி", "Madurai": "மதுரை", "Mayiladuthurai": "மயிலாடுதுறை", "Nagapattinam": "நாகப்பட்டினம்",
+    "Namakkal": "நாமக்கல்", "Nilgiris": "நீலகிரி", "Perambalur": "பெரம்பலூர்", "Pudukkottai": "புதுக்கோட்டை",
+    "Ramanathapuram": "இராமநாதபுரம்", "Ranipet": "இராணிப்பேட்டை", "Salem": "சேலம்", "Sivaganga": "சிவகங்கை",
+    "Tenkasi": "தென்காசி", "Thanjavur": "தஞ்சாவூர்", "Theni": "தேனி", "Thoothukudi": "தூத்துக்குடி",
+    "Tiruchirappalli": "திருச்சிராப்பள்ளி", "Tirunelveli": "திருநெல்வேலி", "Tirupathur": "திருப்பத்தூர்",
+    "Tiruppur": "திருப்பூர்", "Tiruvallur": "திருவள்ளூர்", "Tiruvannamalai": "திருவண்ணாமலை",
+    "Tiruvarur": "திருவாரூர்", "Vellore": "வேலூர்", "Viluppuram": "விழுப்புரம்", "Virudhunagar": "விருதுநகர்",
+}
+
+if "district" not in st.session_state:
+    st.session_state["district"] = "Thoothukudi"
+
+CROPS = {
+    "Paddy": {"rain_min": 60, "rain_ideal": 100, "temp_min": 22, "temp_ideal": 29, "waterlogging_sensitive": False},
+    "Maize": {"rain_min": 25, "rain_ideal": 60, "temp_min": 18, "temp_ideal": 27, "waterlogging_sensitive": True},
+    "Groundnut": {"rain_min": 20, "rain_ideal": 50, "temp_min": 22, "temp_ideal": 30, "waterlogging_sensitive": True},
+    "Cotton": {"rain_min": 25, "rain_ideal": 65, "temp_min": 21, "temp_ideal": 30, "waterlogging_sensitive": True},
+    "Sugarcane": {"rain_min": 50, "rain_ideal": 90, "temp_min": 20, "temp_ideal": 30, "waterlogging_sensitive": False},
+    "Banana": {"rain_min": 45, "rain_ideal": 85, "temp_min": 21, "temp_ideal": 29, "waterlogging_sensitive": True},
+    "Black Gram (Urad)": {"rain_min": 20, "rain_ideal": 45, "temp_min": 22, "temp_ideal": 30, "waterlogging_sensitive": True},
+    "Green Gram (Moong)": {"rain_min": 20, "rain_ideal": 45, "temp_min": 22, "temp_ideal": 30, "waterlogging_sensitive": True},
+    "Red Gram (Toor)": {"rain_min": 25, "rain_ideal": 55, "temp_min": 20, "temp_ideal": 29, "waterlogging_sensitive": True},
+    "Pearl Millet (Cumbu)": {"rain_min": 15, "rain_ideal": 40, "temp_min": 24, "temp_ideal": 32, "waterlogging_sensitive": True},
+    "Sorghum (Cholam)": {"rain_min": 15, "rain_ideal": 42, "temp_min": 23, "temp_ideal": 31, "waterlogging_sensitive": True},
+    "Finger Millet (Ragi)": {"rain_min": 18, "rain_ideal": 45, "temp_min": 20, "temp_ideal": 29, "waterlogging_sensitive": True},
+    "Millet": {"rain_min": 15, "rain_ideal": 40, "temp_min": 24, "temp_ideal": 32, "waterlogging_sensitive": True},
+    "Sesame (Gingelly)": {"rain_min": 15, "rain_ideal": 38, "temp_min": 24, "temp_ideal": 32, "waterlogging_sensitive": True},
+    "Sunflower": {"rain_min": 20, "rain_ideal": 48, "temp_min": 20, "temp_ideal": 28, "waterlogging_sensitive": True},
+    "Turmeric": {"rain_min": 40, "rain_ideal": 75, "temp_min": 20, "temp_ideal": 28, "waterlogging_sensitive": True},
+    "Chilli": {"rain_min": 20, "rain_ideal": 50, "temp_min": 20, "temp_ideal": 28, "waterlogging_sensitive": True},
+    "Onion": {"rain_min": 18, "rain_ideal": 45, "temp_min": 19, "temp_ideal": 27, "waterlogging_sensitive": True},
+    "Tomato": {"rain_min": 20, "rain_ideal": 48, "temp_min": 18, "temp_ideal": 26, "waterlogging_sensitive": True},
+    "Tapioca (Cassava)": {"rain_min": 25, "rain_ideal": 60, "temp_min": 22, "temp_ideal": 30, "waterlogging_sensitive": True},
+}
+
+CROP_TA = {
+    "Paddy": "நெல்", "Maize": "மக்காச்சோளம்", "Groundnut": "நிலக்கடலை", "Cotton": "பருத்தி",
+    "Sugarcane": "கரும்பு", "Banana": "வாழை", "Black Gram (Urad)": "உளுந்து", "Green Gram (Moong)": "பாசிப்பயறு",
+    "Red Gram (Toor)": "துவரை", "Pearl Millet (Cumbu)": "கம்பு", "Sorghum (Cholam)": "சோளம்",
+    "Finger Millet (Ragi)": "கேழ்வரகு (ராகி)", "Millet": "சிறுதானியம்", "Sesame (Gingelly)": "எள்",
+    "Sunflower": "சூரியகாந்தி", "Turmeric": "மஞ்சள்", "Chilli": "மிளகாய்", "Onion": "வெங்காயம்",
+    "Tomato": "தக்காளி", "Tapioca (Cassava)": "மரவள்ளிக்கிழங்கு",
+}
+
+SOILS = ["Not specified", "Clay", "Loam", "Sandy", "Black soil"]
+SOIL_TA = {
+    "Not specified": "குறிப்பிடப்படவில்லை", "Clay": "களிமண்", "Loam": "வண்டல் மண்",
+    "Sandy": "மணல் மண்", "Black soil": "கரிசல் மண்",
+}
+
+MONTH_NAMES_EN = {1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
+                  7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"}
+MONTH_NAMES_TA = {1: "ஜன", 2: "பிப்", 3: "மார்", 4: "ஏப்", 5: "மே", 6: "ஜூன்",
+                  7: "ஜூலை", 8: "ஆக", 9: "செப்", 10: "அக்", 11: "நவ", 12: "டிச"}
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def reverse_geocode(lat, lon, lang="en"):
+    try:
+        r = requests.get(
+            "https://nominatim.openstreetmap.org/reverse",
+            params={"lat": lat, "lon": lon, "format": "json", "accept-language": lang},
+            headers={"User-Agent": "SowingSenseAI/1.0"},
+            timeout=5,
+        )
+        r.raise_for_status()
+        addr = r.json().get("address", {})
+        place = (
+            addr.get("city")
+            or addr.get("town")
+            or addr.get("village")
+            or addr.get("suburb")
+            or addr.get("county")
+            or addr.get("state_district")
+        )
+        state = addr.get("state", L("Tamil Nadu", "தமிழ்நாடு"))
+        if place:
+            return f"{place}, {state}"
+    except Exception:
+        pass
+    return f"GPS ({lat:.4f}°N, {lon:.4f}°E)"
+
+
+def detect_ip_location():
+    for url in ["https://ipapi.co/json/", "http://ip-api.com/json/"]:
+        try:
+            r = requests.get(url, timeout=4)
+            if r.status_code == 200:
+                d = r.json()
+                lat = d.get("latitude") or d.get("lat")
+                lon = d.get("longitude") or d.get("lon")
+                if lat and lon:
+                    return float(lat), float(lon)
+        except Exception:
+            continue
+    return 8.8053, 78.1453
+
+
+def trigger_browser_gps():
+    components.html(
+        """<script>
+        (function () {
+            if (!navigator.geolocation) { return; }
+            navigator.geolocation.getCurrentPosition(function (pos) {
+                const lat = pos.coords.latitude, lon = pos.coords.longitude;
+                const url = new URL(window.parent.location.href);
+                const oldLat = parseFloat(url.searchParams.get("gps_lat"));
+                const oldLon = parseFloat(url.searchParams.get("gps_lon"));
+                // reload only if the position really changed (~200 m), so GPS jitter cannot cause a reload loop
+                const moved = isNaN(oldLat) || isNaN(oldLon) ||
+                              Math.abs(oldLat - lat) > 0.002 || Math.abs(oldLon - lon) > 0.002;
+                if (moved) {
+                    url.searchParams.delete("gps_err");
+                    url.searchParams.set("gps_lat", lat.toFixed(5));
+                    url.searchParams.set("gps_lon", lon.toFixed(5));
+                    url.searchParams.set("gps_acc", Math.round(pos.coords.accuracy));
+                    window.parent.location.href = url.toString();
+                }
+            }, function (err) {
+                const url = new URL(window.parent.location.href);
+                if (url.searchParams.get("gps_err") !== String(err.code)) {
+                    url.searchParams.set("gps_err", err.code);
+                    window.parent.location.href = url.toString();
+                }
+            }, {enableHighAccuracy: true, timeout: 15000, maximumAge: 0});
+        })();
+        </script>""",
+        height=0,
+    )
+
+
+def _request_gps():
+    # runs as a button callback, i.e. BEFORE the selectbox is created, so setting its key is allowed
+    st.session_state["district"] = LIVE_LOC_KEY
+
+
+qp = st.query_params
+if "gps_lat" in qp and "gps_lon" in qp:
+    try:
+        _new_fix = (float(qp["gps_lat"]), float(qp["gps_lon"]))
+        # apply the URL fix only when it is new, otherwise the user could never switch back to a district
+        if st.session_state.get("_gps_qp_seen") != _new_fix:
+            st.session_state["live_lat"], st.session_state["live_lon"] = _new_fix
+            st.session_state["district"] = LIVE_LOC_KEY
+            st.session_state["_gps_qp_seen"] = _new_fix
+        st.session_state["live_acc"] = float(qp.get("gps_acc", 0) or 0)
+    except ValueError:
+        pass
 
 
 # ---------- UI helpers ----------
@@ -264,7 +470,7 @@ def chips(items, kind="warn"):
 def style_fig(fig, height=330, title=None):
     fig.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                       height=height, margin=dict(l=10, r=10, t=44 if title else 14, b=10), colorway=PALETTE,
-                      font=dict(family="Inter, sans-serif", color="#d4e6df"),
+                      font=dict(family="Inter, Noto Sans Tamil, sans-serif", color="#d4e6df"),
                       legend=dict(orientation="h", y=-0.18, x=0, title_text=""),
                       hoverlabel=dict(bgcolor="#0b222d", font_size=13))
     if title:
@@ -276,11 +482,12 @@ def style_fig(fig, height=330, title=None):
 
 def donut(score):
     color = GREEN if score >= 70 else AMBER if score >= 45 else RED
+    lbl = L("Suitable<br>for sowing", "விதைப்புக்கு<br>உகந்தது")
     fig = go.Figure(go.Pie(values=[score, 100 - score], hole=.76, sort=False, direction="clockwise",
                            marker=dict(colors=[color, "rgba(255,255,255,.07)"], line=dict(width=0)),
                            textinfo="none", hoverinfo="skip"))
     fig.update_layout(height=210, margin=dict(l=0, r=0, t=0, b=0), paper_bgcolor="rgba(0,0,0,0)", showlegend=False,
-                      annotations=[dict(text=f"<b style='font-size:30px'>{score}%</b><br><span style='font-size:12px;color:#a8c9bd'>Suitable<br>for sowing</span>",
+                      annotations=[dict(text=f"<b style='font-size:30px'>{score}%</b><br><span style='font-size:12px;color:#a8c9bd'>{lbl}</span>",
                                         x=.5, y=.5, showarrow=False, font=dict(color="#fff"))])
     return fig
 
@@ -294,7 +501,7 @@ def bar_rows(items):
 
 
 # =====================================================================
-# DATA / MODEL
+# DATA / MODEL & GOOGLE-SYNCED MULTI-SOURCE LIVE WEATHER ENGINE
 # =====================================================================
 @st.cache_resource
 def load_sowing_model():
@@ -303,25 +510,17 @@ def load_sowing_model():
 
 sowing_model = load_sowing_model()
 
-CROPS = {
-    "Paddy": {"rain_min": 60, "rain_ideal": 100, "temp_min": 22, "temp_ideal": 29, "waterlogging_sensitive": False},
-    "Maize": {"rain_min": 25, "rain_ideal": 60, "temp_min": 18, "temp_ideal": 27, "waterlogging_sensitive": True},
-    "Groundnut": {"rain_min": 20, "rain_ideal": 50, "temp_min": 22, "temp_ideal": 30, "waterlogging_sensitive": True},
-    "Millet": {"rain_min": 15, "rain_ideal": 40, "temp_min": 24, "temp_ideal": 32, "waterlogging_sensitive": True},
-    "Cotton": {"rain_min": 25, "rain_ideal": 65, "temp_min": 21, "temp_ideal": 30, "waterlogging_sensitive": True},
-}
-DISTRICTS = {
-    "Thoothukudi": (8.7642, 78.1348), "Tirunelveli": (8.7139, 77.7567), "Madurai": (9.9252, 78.1198),
-    "Chennai": (13.0827, 80.2707), "Coimbatore": (11.0168, 76.9558), "Thanjavur": (10.7870, 79.1378),
-    "Salem": (11.6643, 78.1460),
-}
-SOILS = ["Not specified", "Clay", "Loam", "Sandy", "Black soil"]
 SRC_LIVE, SRC_DEMO = "Live forecast (Open-Meteo)", "Demo data (offline)"
 
-WX_CODES = {0: ("Clear sky", "☀️"), 1: ("Mainly clear", "🌤️"), 2: ("Partly cloudy", "⛅"), 3: ("Overcast", "☁️"),
-            45: ("Fog", "🌫️"), 48: ("Fog", "🌫️"), 51: ("Light drizzle", "🌦️"), 53: ("Drizzle", "🌦️"), 55: ("Heavy drizzle", "🌧️"),
-            61: ("Light rain", "🌧️"), 63: ("Rain", "🌧️"), 65: ("Heavy rain", "🌧️"), 80: ("Rain showers", "🌦️"),
-            81: ("Rain showers", "🌧️"), 82: ("Violent showers", "⛈️"), 95: ("Thunderstorm", "⛈️"), 96: ("Thunderstorm", "⛈️"), 99: ("Thunderstorm", "⛈️")}
+WX_CODES = {
+    0: ("Clear sky", "தெளிவான வானம்", "☀️"), 1: ("Mainly clear", "பெரும்பாலும் தெளிவு", "🌤️"),
+    2: ("Partly cloudy", "ஓரளவு மேகமூட்டம்", "⛅"), 3: ("Overcast", "மேகமூட்டம்", "☁️"),
+    45: ("Fog", "பனிமூட்டம்", "🌫️"), 48: ("Fog", "பனிமூட்டம்", "🌫️"),
+    51: ("Light drizzle", "லேசான தூறல்", "🌦️"), 53: ("Drizzle", "தூறல்", "🌦️"), 55: ("Heavy drizzle", "பலத்த தூறல்", "🌧️"),
+    61: ("Light rain / showers", "லேசான மழை / சாரல்", "🌦️"), 63: ("Rain", "மழை", "🌧️"), 65: ("Heavy rain", "கனமழை", "🌧️"),
+    80: ("Light rain / showers", "லேசான மழை / சாரல்", "🌦️"), 81: ("Rain showers", "பலத்த சாரல்", "🌧️"), 82: ("Violent showers", "மிக கனமழை", "⛈️"),
+    95: ("Thunderstorm", "இடியுடன் மழை", "⛈️"), 96: ("Thunderstorm", "இடி மின்னல் மழை", "⛈️"), 99: ("Thunderstorm", "கடும் இடி மழை", "⛈️"),
+}
 
 
 def get_demo_weather(start_date, seed=42):
@@ -338,53 +537,216 @@ def get_demo_weather(start_date, seed=42):
 
 
 def fetch_open_meteo(lat, lon):
-    import requests
-    params = {"latitude": lat, "longitude": lon, "daily": "precipitation_sum,temperature_2m_max,temperature_2m_min",
-              "timezone": "auto", "forecast_days": 16}
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "daily": "precipitation_sum,temperature_2m_max,temperature_2m_min",
+        "timezone": "Asia/Kolkata",
+        "cell_selection": "nearest",
+        "forecast_days": 16,
+    }
     r = requests.get("https://api.open-meteo.com/v1/forecast", params=params, timeout=8)
     r.raise_for_status()
     d = r.json().get("daily", {})
-    df = pd.DataFrame({"date": pd.to_datetime(d.get("time", [])), "rain_mm": d.get("precipitation_sum", []),
-                       "tmax_c": d.get("temperature_2m_max", []), "tmin_c": d.get("temperature_2m_min", [])}).dropna()
+    df = pd.DataFrame({
+        "date": pd.to_datetime(d.get("time", [])),
+        "rain_mm": d.get("precipitation_sum", []),
+        "tmax_c": d.get("temperature_2m_max", []),
+        "tmin_c": d.get("temperature_2m_min", []),
+    }).dropna()
     if df.empty:
         raise ValueError("No forecast data returned")
     return df
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_current_weather(lat, lon):
-    import requests
-    params = {"latitude": lat, "longitude": lon, "timezone": "auto",
-              "current": "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,wind_speed_10m,wind_direction_10m,weather_code"}
-    r = requests.get("https://api.open-meteo.com/v1/forecast", params=params, timeout=15)
+def fetch_current_weather(lat, lon, _v=3):
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "timezone": "Asia/Kolkata",
+        "cell_selection": "nearest",
+        "current": "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,wind_speed_10m,wind_direction_10m,weather_code",
+        "hourly": "precipitation_probability,relative_humidity_2m,temperature_2m,weather_code",
+        "forecast_days": 1,
+    }
+    r = requests.get("https://api.open-meteo.com/v1/forecast", params=params, timeout=10)
     r.raise_for_status()
-    cur = r.json().get("current")
+    data = r.json()
+    cur = data.get("current")
     if not cur:
         raise ValueError("Current weather unavailable")
+
+    rain_prob = None
+    hourly = data.get("hourly", {})
+    if hourly.get("time") and hourly.get("precipitation_probability"):
+        now_hr = datetime.now().strftime("%Y-%m-%dT%H:00")
+        times = hourly["time"]
+        probs = hourly["precipitation_probability"]
+        if now_hr in times:
+            rain_prob = probs[times.index(now_hr)]
+        elif probs:
+            rain_prob = max(probs[:6])
+    cur["rain_prob"] = int(rain_prob) if rain_prob is not None else 0
+
+    temps = [float(cur["temperature_2m"])]
+    hums = [float(cur["relative_humidity_2m"])]
+    feels = [float(cur["apparent_temperature"])]
+
+    try:
+        gfs_r = requests.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={
+                "latitude": lat,
+                "longitude": lon,
+                "timezone": "Asia/Kolkata",
+                "models": "gfs_seamless,ecmwf_ifs025",
+                "current": "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code",
+            },
+            timeout=5,
+        )
+        if gfs_r.status_code == 200:
+            gcur = gfs_r.json().get("current", {})
+            if gcur.get("temperature_2m") is not None:
+                temps.append(float(gcur["temperature_2m"]))
+            if gcur.get("relative_humidity_2m") is not None:
+                hums.append(float(gcur["relative_humidity_2m"]))
+            if gcur.get("apparent_temperature") is not None:
+                feels.append(float(gcur["apparent_temperature"]))
+    except Exception:
+        pass
+
+    try:
+        met_r = requests.get(
+            "https://api.met.no/weatherapi/locationforecast/2.0/compact",
+            params={"lat": f"{lat:.4f}", "lon": f"{lon:.4f}"},
+            headers={"User-Agent": "SowingSenseAI/2.0 (tamilnadu-agri-app)"},
+            timeout=5,
+        )
+        if met_r.status_code == 200:
+            ts = met_r.json().get("properties", {}).get("timeseries", [])
+            if ts:
+                inst = ts[0].get("data", {}).get("instant", {}).get("details", {})
+                if inst.get("air_temperature") is not None:
+                    temps.append(float(inst["air_temperature"]))
+                if inst.get("relative_humidity") is not None:
+                    hums.append(float(inst["relative_humidity"]))
+                if inst.get("wind_speed") is not None:
+                    cur["wind_speed_10m"] = float(inst["wind_speed"]) * 3.6
+                if inst.get("wind_from_direction") is not None:
+                    cur["wind_direction_10m"] = float(inst["wind_from_direction"])
+                nxt1 = ts[0].get("data", {}).get("next_1_hours", {})
+                sym = nxt1.get("summary", {}).get("symbol_code", "")
+                p_amt = nxt1.get("details", {}).get("precipitation_amount")
+                if p_amt is not None and p_amt > float(cur.get("precipitation", 0)):
+                    cur["precipitation"] = p_amt
+                if "rain" in sym or "sleet" in sym or (cur["rain_prob"] >= 50 and int(cur.get("weather_code", 0)) in (2, 3)):
+                    cur["weather_code"] = 80
+    except Exception:
+        pass
+
+    cur["temperature_2m"] = int(round(min(temps)))
+    cur["apparent_temperature"] = int(round(sum(feels) / len(feels)))
+    cur["relative_humidity_2m"] = int(round(max(hums)))
+
+    if cur["rain_prob"] >= 50 and int(cur.get("weather_code", 0)) in (2, 3):
+        cur["weather_code"] = 80
+
+    precip = cur.get("precipitation")
+    cur["rain"] = round(float(precip if precip is not None else cur.get("rain", 0.0)), 1)
+    w_kmh = float(cur.get("wind_speed_10m", 0))
+    cur["wind_speed_10m"] = int(round(w_kmh))
+    cur["wind_mph"] = int(round(w_kmh * 0.621371))
+
     return cur
 
 
+# =====================================================================
+# DYNAMIC HISTORICAL CLIMATE TRENDS & MONTHLY SUMMARY PER CITY
+# =====================================================================
 @st.cache_data(ttl=3600, show_spinner=False)
-def reverse_geocode(lat, lon):
-    """Turn GPS coordinates into a (place, state) label using OpenStreetMap Nominatim."""
-    import requests
-    r = requests.get("https://nominatim.openstreetmap.org/reverse",
-                     params={"lat": round(lat, 4), "lon": round(lon, 4), "format": "jsonv2", "zoom": 10},
-                     headers={"User-Agent": "SowingSenseAI/1.0"}, timeout=8)
-    r.raise_for_status()
-    a = r.json().get("address", {})
-    place = a.get("city") or a.get("town") or a.get("village") or a.get("county") or a.get("state_district") or "Your location"
-    return place, a.get("state", "")
+def fetch_city_historical_climate(lat, lon):
+    """Fetches real 2024-2025 historical daily weather for the selected city from Open-Meteo Archive API."""
+    try:
+        params = {
+            "latitude": round(lat, 4),
+            "longitude": round(lon, 4),
+            "start_date": "2024-01-01",
+            "end_date": "2025-12-31",
+            "daily": "temperature_2m_mean,temperature_2m_max,temperature_2m_min,precipitation_sum",
+            "timezone": "Asia/Kolkata",
+        }
+        r = requests.get("https://archive-api.open-meteo.com/v1/archive", params=params, timeout=8)
+        r.raise_for_status()
+        d = r.json().get("daily", {})
+        df = pd.DataFrame({
+            "date": pd.to_datetime(d.get("time", [])),
+            "avg_temp_c": d.get("temperature_2m_mean", []),
+            "tmax": d.get("temperature_2m_max", []),
+            "tmin": d.get("temperature_2m_min", []),
+            "rain": d.get("precipitation_sum", []),
+        }).dropna()
+        if df.empty:
+            return None, None
+
+        df["max_temp_7day_c"] = df["tmax"].rolling(7, min_periods=1).max().round(1)
+        df["min_temp_7day_c"] = df["tmin"].rolling(7, min_periods=1).min().round(1)
+        df["rain_7day_mm"] = df["rain"].rolling(7, min_periods=1).sum().round(1)
+        df["avg_temp_c"] = df["avg_temp_c"].round(1)
+
+        df["month_num"] = df["date"].dt.month
+        df["year"] = df["date"].dt.year
+        yearly_m = df.groupby(["year", "month_num"], as_index=False).agg(
+            average_temperature_c=("avg_temp_c", "mean"),
+            total_rainfall_mm=("rain", "sum"),
+        )
+        m_df = yearly_m.groupby("month_num", as_index=False).agg(
+            average_temperature_c=("average_temperature_c", "mean"),
+            total_rainfall_mm=("total_rainfall_mm", "mean"),
+        ).rename(columns={"month_num": "month"})
+        m_df["average_temperature_c"] = m_df["average_temperature_c"].round(1)
+        m_df["total_rainfall_mm"] = m_df["total_rainfall_mm"].round(1)
+
+        return df[["date", "avg_temp_c", "max_temp_7day_c", "min_temp_7day_c", "rain_7day_mm"]], m_df
+    except Exception:
+        return None, None
 
 
 @st.cache_data(show_spinner=False)
-def load_hist():
+def load_hist(lat=8.8053, lon=78.1453):
+    dyn_hist, _ = fetch_city_historical_climate(lat, lon)
+    if dyn_hist is not None:
+        return dyn_hist
     return pd.read_csv(WEATHER_FEATURES_PATH, parse_dates=["date"]) if WEATHER_FEATURES_PATH.exists() else None
 
 
 @st.cache_data(show_spinner=False)
-def load_monthly():
+def load_monthly(lat=8.8053, lon=78.1453):
+    _, dyn_monthly = fetch_city_historical_climate(lat, lon)
+    if dyn_monthly is not None:
+        return dyn_monthly
     return pd.read_csv(MONTHLY_PATH) if MONTHLY_PATH.exists() else None
+
+
+def get_trend_legend_map():
+    return {
+        "avg_temp_c": L("Avg Temperature (°C)", "சராசரி வெப்பநிலை (°C)"),
+        "max_temp_7day_c": L("7-Day Max Temp (°C)", "7-நாள் அதிகபட்ச வெப்பம் (°C)"),
+        "min_temp_7day_c": L("7-Day Min Temp (°C)", "7-நாள் குறைந்தபட்ச வெப்பம் (°C)"),
+        "rain_7day_mm": L("7-Day Rainfall (mm)", "7-நாள் மழைப்பொழிவு (மி.மீ)"),
+    }
+
+
+def format_monthly_df(monthly_df):
+    if monthly_df is None:
+        return None
+    m = monthly_df.copy()
+    if "month" in m.columns and pd.api.types.is_numeric_dtype(m["month"]):
+        m_map = MONTH_NAMES_TA if is_ta() else MONTH_NAMES_EN
+        m["month_label"] = m["month"].map(lambda x: m_map.get(int(x), str(x)))
+    else:
+        m["month_label"] = m["month"].astype(str)
+    return m
 
 
 def predict_sowing_suitability(rain, temp, dry):
@@ -393,7 +755,8 @@ def predict_sowing_suitability(rain, temp, dry):
     f = pd.DataFrame([{"rainfall_mm": rain, "temperature_c": temp, "dry_spell_days": dry}])
     pred = int(sowing_model.predict(f)[0])
     conf = float(max(sowing_model.predict_proba(f)[0]) * 100)
-    return ("Favourable (demo model)" if pred == 1 else "Less favourable (demo model)"), conf
+    label = L("Favourable (demo model)", "சாதகமானது (மாதிரி AI)") if pred == 1 else L("Less favourable (demo model)", "குறைந்த சாதகம் (மாதிரி AI)")
+    return label, conf
 
 
 def max_consecutive_dry(values):
@@ -423,15 +786,15 @@ def score_window(window, ci):
     score = round(0.35 * rain_score + 0.30 * temp_score + 0.20 * dry_score + 0.15 * excess_score)
     risks = []
     if rain < ci["rain_min"]:
-        risks.append("Rainfall may be insufficient")
+        risks.append(L("Rainfall may be insufficient", "மழைப்பொழிவு போதுமானதாக இல்லாமல் இருக்கலாம்"))
     if dry_spell >= 5:
-        risks.append("Possible prolonged dry spell")
+        risks.append(L("Possible prolonged dry spell", "நீண்ட வறட்சி ஏற்பட வாய்ப்புள்ளது"))
     if avg_temp > ci["temp_ideal"] + 3:
-        risks.append("Temperature may be high")
+        risks.append(L("Temperature may be high", "வெப்பநிலை அதிகமாக இருக்கலாம்"))
     if rain > ci["rain_ideal"] * 1.4:
-        risks.append("Excess rainfall / waterlogging risk")
+        risks.append(L("Excess rainfall / waterlogging risk", "அதிக மழை / நீர் தேங்கும் அபாயம்"))
     if not risks:
-        risks.append("No major risk flagged by this simple prototype")
+        risks.append(L("No major risk flagged by this simple prototype", "முக்கிய அபாயம் எதுவும் கண்டறியப்படவில்லை"))
     return {"score": int(max(0, min(100, score))), "rain_mm": round(rain, 1), "avg_temp": round(avg_temp, 1),
             "dry_spell": dry_spell, "rainy_days": rainy, "risks": risks,
             "parts": [int(round(rain_score)), int(round(temp_score)), int(round(dry_score)), int(round(excess_score))]}
@@ -455,25 +818,68 @@ def evaluate_windows(weather, ci):
 
 
 def compass(deg):
-    return ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][int(round(float(deg) / 45)) % 8]
+    en = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+    ta = ["வடக்கு", "வடகிழக்கு", "கிழக்கு", "தென்கிழக்கு", "தெற்கு", "தென்மேற்கு", "மேற்கு", "வடமேற்கு"]
+    idx = int(round(float(deg) / 45)) % 8
+    return ta[idx] if is_ta() else en[idx]
 
 
 # =====================================================================
-# TOP NAV
+# SINGLE-LINE TOP NAV (4 MAIN TABS + "MORE" DROPDOWN + LANGUAGE TOGGLE)
 # =====================================================================
-PAGES = {"Dashboard": "🏠", "Sowing Recommendation": "🌱", "Weather & Climate": "⛅", "Crop Information": "🌾",
-         "Soil Analysis": "🧪", "Climate Trends": "📈", "Insights & Alerts": "🔔", "Export Data": "📤", "About": "ℹ️"}
+MAIN_PAGES = {
+    "Dashboard": ("🏠 Dashboard", "🏠 முகப்பு"),
+    "Sowing Recommendation": ("🌱 Sowing Recommendation", "🌱 விதைப்பு பரிந்துரை"),
+    "Insights & Alerts": ("🔔 Insights & Alerts", "🔔 எச்சரிக்கைகள்"),
+    "About": ("ℹ️ About", "ℹ️ பற்றி"),
+}
+
+MORE_PAGES = {
+    "None": ("➕ More", "➕ மேலும்"),
+    "Weather & Climate": ("⛅ Weather & Climate", "⛅ வானிலை & காலநிலை"),
+    "Crop Information": ("🌾 Crop Information", "🌾 பயிர் தகவல்"),
+    "Soil Analysis": ("🧪 Soil Analysis", "🧪 மண் ஆய்வு"),
+    "Climate Trends": ("📈 Climate Trends", "📈 காலநிலை போக்கு"),
+    "Climate Twin Simulator": ("🔮 Climate Twin Simulator", "🔮 காலநிலை சிமுலேட்டர்"),
+    "Export Data": ("📤 Export Data", "📤 தரவு பதிவிறக்கம்"),
+}
+
+if "active_page" not in st.session_state:
+    st.session_state["active_page"] = "Dashboard"
+if "nav_main" not in st.session_state:
+    st.session_state["nav_main"] = "Dashboard"
+if "nav_more" not in st.session_state:
+    st.session_state["nav_more"] = "None"
+
+
+def _on_main_nav():
+    st.session_state["active_page"] = st.session_state["nav_main"]
+    st.session_state["nav_more"] = "None"
+
+
+def _on_more_nav():
+    if st.session_state["nav_more"] != "None":
+        st.session_state["active_page"] = st.session_state["nav_more"]
+
 
 try:
     nav_box = st.container(key="topnav")
-except TypeError:  # older Streamlit without container keys
+except TypeError:
     nav_box = st.container()
 with nav_box:
-    nb = st.columns([1.3, 6])
-    nb[0].markdown('<div class="brand"><div class="logo">🌱</div><div><div class="name">Sowing<b>Sense</b> AI</div>'
-                   '<div class="tag">Smarter Sowing. Healthier Tomorrow.</div></div></div>', unsafe_allow_html=True)
-    page = nb[1].radio("Navigation", list(PAGES.keys()), format_func=lambda p: f"{PAGES[p]}  {p}",
-                       horizontal=True, key="nav", label_visibility="collapsed")
+    nb = st.columns([1.55, 4.55, 1.25, 1.05], gap="small")
+    nb[0].markdown(f'<div class="brand"><div class="logo">🌱</div><div><div class="name">Sowing<b>Sense</b> AI</div>'
+                   f'<div class="tag">{L("Smarter Sowing. Healthier Tomorrow.", "திறமையான விதைப்பு. வளமான எதிர்காலம்.")}</div></div></div>', unsafe_allow_html=True)
+    nb[1].radio("Main Navigation", list(MAIN_PAGES.keys()),
+                format_func=lambda p: MAIN_PAGES[p][1 if is_ta() else 0],
+                horizontal=True, key="nav_main", on_change=_on_main_nav, label_visibility="collapsed")
+    nb[2].selectbox("More Options", list(MORE_PAGES.keys()),
+                    format_func=lambda p: MORE_PAGES[p][1 if is_ta() else 0],
+                    key="nav_more", on_change=_on_more_nav, label_visibility="collapsed")
+    nb[3].radio("Language", ["en", "ta"], format_func=lambda x: "🌐 EN" if x == "en" else "🇮🇳 தமிழ்",
+                horizontal=True, key="lang", label_visibility="collapsed")
+
+page = st.session_state["active_page"]
 
 # =====================================================================
 # HERO (dashboard) + FARM BAR (all pages)
@@ -484,60 +890,88 @@ if page == "Dashboard":
     st.markdown(f"""
 <div class="hero"><div class="hero-top"><div>
 <div class="title"><span class="grad">SowingSense</span><span class="ai-badge">AI</span></div>
-<div class="sub">AI-Powered Climate Intelligence for Smarter Sowing Decisions</div>
-<div class="tags">Weather insights &nbsp;•&nbsp; Crop analysis &nbsp;•&nbsp; Sustainable farming</div>
+<div class="sub">{L("AI-Powered Climate Intelligence for Smarter Sowing Decisions", "சிறந்த விதைப்பு முடிவுகளுக்கான AI பருவநிலை நுண்ணறிவுத் தளம்")}</div>
+<div class="tags">{L("Weather insights  •  Crop analysis  •  Sustainable farming", "வானிலை தகவல்கள்  •  பயிர் ஆய்வு  •  நிலையான விவசாயம்")}</div>
 </div><div class="hero-right">
 <span class="pill">📅 {date.today():%a, %d %b %Y}</span>
-<span class="pill {'live' if is_live_sel else 'demo'}"><span class="dot"></span>{'Live Data' if is_live_sel else 'Demo Data'}</span>
+<span class="pill {'live' if is_live_sel else 'demo'}"><span class="dot"></span>{L('Live Data', 'நேரடி தரவு') if is_live_sel else L('Demo Data', 'மாதிரி தரவு')}</span>
 </div></div>
 <div class="feat-row">
-<div class="feat"><span class="ico">🌦️</span><div><div class="t">Live Weather Data</div><div class="s">Open-Meteo API</div></div></div>
-<div class="feat"><span class="ico">🤖</span><div><div class="t">ML-based Crop Analysis</div><div class="s">Climate + Weather</div></div></div>
-<div class="feat"><span class="ico">📊</span><div><div class="t">Climate Trends</div><div class="s">Historical Analysis</div></div></div>
-<div class="feat"><span class="ico">🍃</span><div><div class="t">Sustainable Farming</div><div class="s">Better Future</div></div></div>
+<div class="feat"><span class="ico">🌦️</span><div><div class="t">{L("Live Weather Data", "நேரடி வானிலை தரவு")}</div><div class="s">{L("Open-Meteo API", "Open-Meteo நிகழ்நேரம்")}</div></div></div>
+<div class="feat"><span class="ico">🤖</span><div><div class="t">{L("ML-based Crop Analysis", "AI பயிர் பகுப்பாய்வு")}</div><div class="s">{L("Climate + Weather", "காலநிலை + வானிலை")}</div></div></div>
+<div class="feat"><span class="ico">📊</span><div><div class="t">{L("Climate Trends", "காலநிலை போக்குகள்")}</div><div class="s">{L("Historical Analysis", "வரலாற்றுப் பகுப்பாய்வு")}</div></div></div>
+<div class="feat"><span class="ico">🍃</span><div><div class="t">{L("Sustainable Farming", "நிலையான விவசாயம்")}</div><div class="s">{L("Better Future", "வளமான எதிர்காலம்")}</div></div></div>
 </div></div>
-<div class="jump"><a href="#sec-weather">⛅ Live weather</a><a href="#sec-forecast">📅 Forecast</a><a href="#sec-trends">📈 Trends</a><a href="#sec-suit">🎯 Suitability</a><a href="#sec-reco">🌱 AI recommendation</a></div>
+<div class="jump"><a href="#sec-weather">{L("⛅ Live weather", "⛅ நேரடி வானிலை")}</a><a href="#sec-forecast">{L("📅 Forecast", "📅 முன்னறிவிப்பு")}</a><a href="#sec-trends">{L("📈 Trends", "📈 காலநிலை போக்கு")}</a><a href="#sec-suit">{L("🎯 Suitability", "🎯 உகந்த தன்மை")}</a><a href="#sec-reco">{L("🌱 AI recommendation", "🌱 AI பரிந்துரை")}</a></div>
 """, unsafe_allow_html=True)
 
 with st.container(border=True):
-    card_title("📍", "Select Farm Details", "Choose location, crop and analysis settings to get AI-powered sowing recommendations")
+    card_title("📍", L("Select Farm Details", "பண்ணை விவரங்களைத் தேர்ந்தெடுக்கவும்"),
+               L("Choose location, crop and analysis settings to get AI-powered sowing recommendations",
+                 "இருப்பிடம், பயிர் மற்றும் ஆய்வு அமைப்புகளைத் தேர்ந்தெடுத்து AI விதைப்பு பரிந்துரைகளைப் பெறுங்கள்"))
     fc = st.columns([1.2, 1.1, 1.5, 1.1, 1.1, 1.35])
-    district = fc[0].selectbox("District / Location", list(DISTRICTS.keys()), key="district",
-                               disabled=st.session_state.get("use_live_loc", False))
-    crop = fc[1].selectbox("Crop", list(CROPS.keys()), key="crop")
-    source = fc[2].selectbox("Climate data source", [SRC_LIVE, SRC_DEMO], key="source")
-    start_day = fc[3].date_input("Start date for analysis", value=date.today(), key="start_day")
-    soil = fc[4].selectbox("Soil type (optional)", SOILS, index=2, key="soil")
+    district = fc[0].selectbox(L("District / Location", "மாவட்டம் / இருப்பிடம்"), list(DISTRICTS.keys()),
+                               format_func=lambda d: DISTRICT_TA.get(d, d) if is_ta() else d, key="district")
+    crop = fc[1].selectbox(L("Crop", "பயிர்"), list(CROPS.keys()),
+                           format_func=lambda c: CROP_TA.get(c, c) if is_ta() else c, key="crop")
+    source = fc[2].selectbox(L("Climate data source", "வானிலை தரவு மூலம்"), [SRC_LIVE, SRC_DEMO],
+                             format_func=lambda s: (L("Live forecast (Open-Meteo)", "நேரடி முன்னறிவிப்பு (Open-Meteo)") if s == SRC_LIVE
+                                                    else L("Demo data (offline)", "மாதிரி தரவு (ஆஃப்லைன்)")), key="source")
+    start_day = fc[3].date_input(L("Start date for analysis", "ஆய்வு தொடங்கும் தேதி"), value=date.today(), key="start_day")
+    soil = fc[4].selectbox(L("Soil type (optional)", "மண் வகை (விருப்பத்தேர்வு)"), SOILS, index=2,
+                           format_func=lambda s: SOIL_TA.get(s, s) if is_ta() else s, key="soil")
     fc[5].markdown("<div style='height:1.75rem'></div>", unsafe_allow_html=True)
-    run = fc[5].button("🌱 Generate Recommendation", type="primary", use_container_width=True)
-    auto_refresh = st.toggle("⚡ Auto-refresh live weather every 60 s", value=True, key="auto_refresh")
-    use_live_loc = st.toggle("📡 Use my live location (GPS)", value=False, key="use_live_loc")
-    if use_live_loc:
-        if streamlit_geolocation is None:
-            st.warning("Live location needs the `streamlit-geolocation` package. Run `pip install streamlit-geolocation` and restart the app.")
-        else:
-            st.caption("Click the button below and allow location access in your browser.")
-            g = streamlit_geolocation()
-            if g and g.get("latitude") is not None and g.get("longitude") is not None:
-                st.session_state["live_coords"] = (float(g["latitude"]), float(g["longitude"]), g.get("accuracy"))
-        if "live_coords" not in st.session_state:
-            st.info("Waiting for your location… using the selected district until it is shared.")
+    run = fc[5].button(L("🌱 Generate Recommendation", "🌱 பரிந்துரையை உருவாக்கு"), type="primary", width="stretch")
 
-live_coords = st.session_state.get("live_coords") if use_live_loc else None
-if live_coords:
-    lat, lon = live_coords[0], live_coords[1]
-    try:
-        district, region = reverse_geocode(lat, lon)
-    except Exception:
-        district, region = "My live location", ""
-    region = region or "Live location"
+    bot1, bot2 = st.columns([2.2, 1.2])
+    auto_refresh = bot1.toggle(L("⚡ Auto-refresh live weather every 60 s", "⚡ 60 நொடிகளுக்கு ஒருமுறை நேரடி வானிலையை புதுப்பி"), value=True, key="auto_refresh")
+    bot2.button(L("📡 Use My Live Location (GPS)", "📡 என் நேரடி இருப்பிடத்தைப் பயன்படுத்து (GPS)"),
+                width="stretch", on_click=_request_gps)
+
+    if district == LIVE_LOC_KEY:
+        try:
+            from streamlit_js_eval import get_geolocation
+            _geo = get_geolocation()          # asks the browser for permission, no page reload needed
+            if isinstance(_geo, dict) and isinstance(_geo.get("coords"), dict):
+                _c = _geo["coords"]
+                st.session_state["live_lat"] = float(_c["latitude"])
+                st.session_state["live_lon"] = float(_c["longitude"])
+                st.session_state["live_acc"] = float(_c.get("accuracy") or 0)
+                st.session_state.pop("live_err", None)
+            elif isinstance(_geo, dict) and _geo.get("error"):
+                st.session_state["live_err"] = True
+        except ImportError:
+            st.session_state["live_err"] = True
+            st.error("Run:  pip install streamlit-js-eval   and restart the app.")
+
+if district == LIVE_LOC_KEY and "live_lat" in st.session_state:
+    lat = float(st.session_state["live_lat"])
+    lon = float(st.session_state["live_lon"])
+    loc_name = reverse_geocode(lat, lon, "ta" if is_ta() else "en")
+    acc = st.session_state.get("live_acc", 0)
+    if acc and acc > 1000:
+        st.warning(L(f"GPS accuracy is low (±{acc/1000:.1f} km) - this device is probably using Wi-Fi/IP positioning. Try a phone with GPS on.",
+                     f"GPS துல்லியம் குறைவு (±{acc/1000:.1f} கி.மீ). GPS உள்ள மொபைலில் முயற்சிக்கவும்."))
+elif district == LIVE_LOC_KEY:
+    lat, lon = DISTRICTS[LIVE_LOC_KEY]
+    loc_name = L("Waiting for GPS…", "GPS காத்திருக்கிறது…")
+    if st.query_params.get("gps_err") or st.session_state.get("live_err"):
+        st.error(L("Location blocked or unavailable. Allow location permission in the browser (site must be HTTPS) and click the GPS button again.",
+                   "இருப்பிடம் தடுக்கப்பட்டுள்ளது. உலாவியில் Location அனுமதி கொடுத்து (HTTPS தேவை) GPS பட்டனை மீண்டும் அழுத்தவும்."))
+    else:
+        st.info(L("Detecting your live location… allow the browser location prompt. Showing a default point until then.",
+                  "உங்கள் நேரடி இருப்பிடம் கண்டறியப்படுகிறது… உலாவி அனுமதியை வழங்கவும்."))
 else:
     lat, lon = DISTRICTS[district]
-    region = "Tamil Nadu"
-config_key = (district, source, start_day, round(lat, 3), round(lon, 3))
+    loc_name = DISTRICT_TA.get(district, district) if is_ta() else district
+
+crop_name = CROP_TA.get(crop, crop) if is_ta() else crop
+soil_name = SOIL_TA.get(soil, soil) if is_ta() else soil
+
+config_key = (district, round(lat, 4), round(lon, 4), source, start_day)
 stale = source == SRC_LIVE and (time.time() - st.session_state.get("fetched_at", 0)) > 900
 if run or stale or "weather_data" not in st.session_state or st.session_state.get("weather_config") != config_key:
-    with st.spinner("Analysing climate data…"):
+    with st.spinner(L("Analysing climate data…", "காலநிலை தரவு ஆய்வு செய்யப்படுகிறது…")):
         if source == SRC_LIVE:
             try:
                 weather = fetch_open_meteo(lat, lon)
@@ -553,7 +987,7 @@ if run or stale or "weather_data" not in st.session_state or st.session_state.ge
         st.session_state["fetched_at"] = time.time()
     if run:
         fetch_current_weather.clear()
-        st.toast("Recommendation updated ✨", icon="🌱")
+        st.toast(L("Recommendation updated ✨", "பரிந்துரை புதுப்பிக்கப்பட்டது ✨"), icon="🌱")
 
 weather = st.session_state["weather_data"].copy()
 weather["date"] = pd.to_datetime(weather["date"])
@@ -564,7 +998,11 @@ weather_total_rain = float(weather["rain_mm"].sum())
 avg_max_temp = float(weather["tmax_c"].mean())
 rainy_days = int((weather["rain_mm"] >= 1).sum())
 dry_days = int((weather["rain_mm"] < 1).sum())
-data_label = st.session_state.get("data_source_label", "Demo data")
+raw_label = st.session_state.get("data_source_label", "Demo data")
+data_label = (
+    L("Open-Meteo forecast", "Open-Meteo நேரடி முன்னறிவிப்பு") if raw_label == "Open-Meteo forecast"
+    else L("Synthetic demo data", "செயற்கை மாதிரி தரவு")
+)
 best = result.iloc[0] if not result.empty else None
 second = result.iloc[1] if len(result) > 1 else best
 
@@ -572,33 +1010,41 @@ second = result.iloc[1] if len(result) > 1 else best
 # =====================================================================
 # SECTION RENDERERS
 # =====================================================================
-def _weather_card(district, lat, lon):
+def _weather_card(loc_label, lat, lon):
     with st.container(border=True):
         top = st.columns([3, 1])
         with top[0]:
-            card_title("🌡️", f"Current Live Weather — {district}", "Open-Meteo real-time conditions")
-        if top[1].button("🔄 Refresh", key="refresh_wx", use_container_width=True):
+            card_title("🌡️", f"{L('Current Live Weather', 'தற்போதைய நேரடி வானிலை')} — {loc_label}",
+                       L("MET Norway + NOAA GFS + ECMWF real-time conditions", "MET Norway + NOAA GFS + ECMWF நிகழ்நேர வானிலை"))
+        if top[1].button(L("🔄 Refresh", "🔄 புதுப்பி"), key="refresh_wx", width="stretch"):
             fetch_current_weather.clear()
-            st.toast("Weather refreshed", icon="🔄")
+            st.toast(L("Weather refreshed", "வானிலை புதுப்பிக்கப்பட்டது"), icon="🔄")
         try:
             c = fetch_current_weather(lat, lon)
-            desc, emo = WX_CODES.get(int(c.get("weather_code", 0)), ("Conditions", "🌡️"))
+            desc_en, desc_ta, emo = WX_CODES.get(int(c.get("weather_code", 0)), ("Conditions", "வானிலை", "🌡️"))
+            desc = desc_ta if is_ta() else desc_en
             if not c.get("is_day", 1) and emo == "☀️":
                 emo = "🌙"
+            r_prob = c.get("rain_prob", 0)
+            rain_lbl = f"{L('Rain chance', 'மழை வாய்ப்பு')}: {r_prob}%" if r_prob else L("Rainfall", "மழைப்பொழிவு")
+            rain_val = f"{r_prob}% ({c.get('rain', 0.0)} mm)" if r_prob and float(c.get("rain", 0)) == 0 else f"{c.get('rain', '—')} mm"
+            wind_val = f"{c.get('wind_speed_10m', '—')} km/h"
+            wind_sub = f"{L('Wind', 'காற்று')} ({c.get('wind_mph', '—')} mph)"
             st.markdown(
                 f'<div class="wx"><div class="wx-main"><div class="wx-emoji">{emo}</div><div>'
                 f'<div class="wx-temp">{c.get("temperature_2m", "—")} °C</div><div class="wx-desc">{desc}</div>'
-                f'<div class="wx-feel">Feels like {c.get("apparent_temperature", "—")} °C</div></div></div>'
+                f'<div class="wx-feel">{L("Feels like", "உணரப்படும் வெப்பம்")} {c.get("apparent_temperature", "—")} °C</div></div></div>'
                 f'<div class="wx-grid">'
-                f'<div class="tile"><div class="ti">💧</div><div class="tv">{c.get("relative_humidity_2m", "—")}%</div><div class="tl">Humidity</div></div>'
-                f'<div class="tile"><div class="ti">🌧️</div><div class="tv">{c.get("rain", "—")} mm</div><div class="tl">Rainfall</div></div>'
-                f'<div class="tile"><div class="ti">💨</div><div class="tv">{c.get("wind_speed_10m", "—")} km/h</div><div class="tl">Wind speed</div></div>'
-                f'<div class="tile"><div class="ti">🧭</div><div class="tv">{compass(c.get("wind_direction_10m", 0))}</div><div class="tl">Wind direction</div></div>'
+                f'<div class="tile"><div class="ti">💧</div><div class="tv">{c.get("relative_humidity_2m", "—")}%</div><div class="tl">{L("Humidity", "ஈரப்பதம்")}</div></div>'
+                f'<div class="tile"><div class="ti">🌧️</div><div class="tv">{rain_val}</div><div class="tl">{rain_lbl}</div></div>'
+                f'<div class="tile"><div class="ti">💨</div><div class="tv">{wind_val}</div><div class="tl">{wind_sub}</div></div>'
+                f'<div class="tile"><div class="ti">🧭</div><div class="tv">{compass(c.get("wind_direction_10m", 0))}</div><div class="tl">{L("Wind direction", "காற்றின் திசை")}</div></div>'
                 f'</div></div>', unsafe_allow_html=True)
-            auto = " · 🟢 auto-updating every 60 s" if st.session_state.get("auto_refresh", True) else ""
-            st.caption(f"Observation: {c.get('time', 'Unavailable')} · Last checked {datetime.now():%H:%M:%S}{auto}")
+            auto = L(" · 🟢 auto-updating every 60 s", " · 🟢 60 நொடிக்கு ஒருமுறை தானாக புதுப்பிக்கப்படுகிறது") if st.session_state.get("auto_refresh", True) else ""
+            st.caption(f"{L('Observation', 'பதிவு நேரம்')}: {c.get('time', 'Unavailable')} · {L('Last checked', 'கடைசி சரிபார்ப்பு')} {datetime.now():%H:%M:%S}{auto}")
         except Exception:
-            st.warning("Live weather is currently unavailable. Current-condition cards are not filled with demo values.")
+            st.warning(L("Live weather is currently unavailable. Current-condition cards are not filled with demo values.",
+                         "நேரடி வானிலை தற்போது கிடைக்கவில்லை. மாதிரி மதிப்புகள் இதில் நிரப்பப்படவில்லை."))
 
 
 def render_current_weather():
@@ -606,21 +1052,21 @@ def render_current_weather():
     left, right = st.columns([2.3, 1])
     with left:
         def _card():
-            _weather_card(district, lat, lon)
+            _weather_card(loc_name, lat, lon)
         if hasattr(st, "fragment"):
             st.fragment(run_every=60 if st.session_state.get("auto_refresh", True) else None)(_card)()
         else:
             _card()
     with right, st.container(border=True):
-        card_title("📍", "Location Information")
-        acc = f" · ±{float(live_coords[2]):.0f} m accuracy" if live_coords and live_coords[2] else ""
-        badge = "📡 " if live_coords else ""
-        st.markdown(f"**{badge}{district}, {region}**  \n<span class='small-note'>{lat:.4f}° N, {lon:.4f}° E{acc}</span>", unsafe_allow_html=True)
+        card_title("📍", L("Location Information", "இருப்பிடத் தகவல்"))
+        state_lbl = "" if "," in loc_name else f", {L('Tamil Nadu', 'தமிழ்நாடு')}"
+        st.markdown(f"**{loc_name}{state_lbl}**  \n<span class='small-note'>{lat:.4f}° N, {lon:.4f}° E</span>", unsafe_allow_html=True)
         try:
-            mp = px.scatter_mapbox(pd.DataFrame({"lat": [lat], "lon": [lon], "n": [district]}), lat="lat", lon="lon", zoom=7, height=170)
+            mp = px.scatter_mapbox(pd.DataFrame({"lat": [lat], "lon": [lon], "n": [loc_name]}), lat="lat", lon="lon",
+                                   zoom=11 if district == "Thoothukudi" or district == LIVE_LOC_KEY else 8, height=170)
             mp.update_traces(marker=dict(size=17, color=GREEN))
             mp.update_layout(mapbox_style="carto-darkmatter", margin=dict(l=0, r=0, t=0, b=0), paper_bgcolor="rgba(0,0,0,0)")
-            st.plotly_chart(mp, use_container_width=True, key="loc_map")
+            st.plotly_chart(mp, width="stretch", key="loc_map")
         except Exception:
             st.map(pd.DataFrame({"lat": [lat], "lon": [lon]}), height=170)
 
@@ -630,22 +1076,30 @@ def build_alerts():
     out = []
     mx = nxt.loc[nxt["rain_mm"].idxmax()]
     if mx["rain_mm"] >= 15:
-        out.append(("bad", "⛈️", "Heavy rainfall expected", f"on {mx['date']:%d %b %Y} ({mx['rain_mm']:.1f} mm)"))
+        out.append(("bad", "⛈️", L("Heavy rainfall expected", "கனமழை எதிர்பார்க்கப்படுகிறது"),
+                    L(f"on {mx['date']:%d %b %Y} ({mx['rain_mm']:.1f} mm)", f"{mx['date']:%d %b %Y} அன்று ({mx['rain_mm']:.1f} மி.மீ)")))
     elif mx["rain_mm"] >= 2:
-        out.append(("warn", "⚠️", "Moderate rainfall expected", f"on {mx['date']:%d %b %Y} ({mx['rain_mm']:.1f} mm)"))
+        out.append(("warn", "⚠️", L("Moderate rainfall expected", "மிதமான மழை எதிர்பார்க்கப்படுகிறது"),
+                    L(f"on {mx['date']:%d %b %Y} ({mx['rain_mm']:.1f} mm)", f"{mx['date']:%d %b %Y} அன்று ({mx['rain_mm']:.1f} மி.மீ)")))
     if nxt["rain_mm"].sum() < 1:
-        out.append(("warn", "🏜️", "Dry week ahead", "No significant rain in next 7 days"))
+        out.append(("warn", "🏜️", L("Dry week ahead", "வறண்ட வாரம்"),
+                    L("No significant rain in next 7 days", "அடுத்த 7 நாட்களில் குறிப்பிடத்தக்க மழை இல்லை")))
     if max_consecutive_dry(nxt["rain_mm"].tolist()) >= 5:
-        out.append(("warn", "☀️", "Long dry spell", "5+ consecutive dry days forecast"))
+        out.append(("warn", "☀️", L("Long dry spell", "நீண்ட வறட்சி காலம்"),
+                    L("5+ consecutive dry days forecast", "தொடர்ந்து 5+ வறண்ட நாட்கள் முன்னறிவிப்பு")))
     if nxt["tmax_c"].max() >= 36:
-        out.append(("bad", "🔥", "Heat alert", f"Max temperature up to {nxt['tmax_c'].max():.0f} °C"))
+        out.append(("bad", "🔥", L("Heat alert", "அதிக வெப்ப எச்சரிக்கை"),
+                    L(f"Max temperature up to {nxt['tmax_c'].max():.0f} °C", f"அதிகபட்ச வெப்பநிலை {nxt['tmax_c'].max():.0f} °C வரை")))
     avg = float(((nxt["tmax_c"] + nxt["tmin_c"]) / 2).mean())
     if abs(avg - CI["temp_ideal"]) <= 3:
-        out.append(("ok", "✅", f"Temperatures suitable for {crop.lower()}", f"avg {avg:.1f} °C vs ideal {CI['temp_ideal']} °C"))
+        out.append(("ok", "✅", L(f"Temperatures suitable for {crop.lower()}", f"{crop_name} பயிருக்கு ஏற்ற வெப்பநிலை"),
+                    L(f"avg {avg:.1f} °C vs ideal {CI['temp_ideal']} °C", f"சராசரி {avg:.1f} °C (உகந்தது {CI['temp_ideal']} °C)")))
     else:
-        out.append(("warn", "🌡️", f"Temperature off-ideal for {crop.lower()}", f"avg {avg:.1f} °C vs ideal {CI['temp_ideal']} °C"))
+        out.append(("warn", "🌡️", L(f"Temperature off-ideal for {crop.lower()}", f"{crop_name} பயிருக்கு சற்று மாறுபட்ட வெப்பநிலை"),
+                    L(f"avg {avg:.1f} °C vs ideal {CI['temp_ideal']} °C", f"சராசரி {avg:.1f} °C (உகந்தது {CI['temp_ideal']} °C)")))
     if nxt["tmax_c"].max() < 36:
-        out.append(("ok", "🌤️", "No extreme heat expected", "in next 7 days"))
+        out.append(("ok", "🌤️", L("No extreme heat expected", "கடும் வெப்பம் எதிர்பார்க்கப்படவில்லை"),
+                    L("in next 7 days", "அடுத்த 7 நாட்களில்")))
     return out
 
 
@@ -660,224 +1114,164 @@ def render_forecast_and_alerts():
     with left, st.container(border=True):
         h = st.columns([2, 1.6])
         with h[0]:
-            card_title("📅", "Weather Forecast", f"Daily forecast · {data_label}")
-        view = h[1].radio("View", ["Combined", "Temperature", "Rainfall"], horizontal=True, key="fc_view")
-        days = st.radio("Range", ["7 days", "14 days"], horizontal=True, key="fc_days")
+            card_title("📅", L("Weather Forecast", "வானிலை முன்னறிவிப்பு"), f"{L('Daily forecast', 'தினசரி முன்னறிவிப்பு')} · {data_label}")
+        view = h[1].radio("View", ["Combined", "Temperature", "Rainfall"],
+                          format_func=lambda v: {"Combined": "இணைந்தது", "Temperature": "வெப்பநிலை", "Rainfall": "மழை"}[v] if is_ta() else v,
+                          horizontal=True, key="fc_view")
+        days = st.radio("Range", ["7 days", "14 days"],
+                        format_func=lambda d: ("7 நாட்கள்" if d == "7 days" else "14 நாட்கள்") if is_ta() else d,
+                        horizontal=True, key="fc_days")
         w = weather.head(7 if days == "7 days" else 14)
         fig = make_subplots(specs=[[{"secondary_y": True}]])
         if view in ("Combined", "Rainfall"):
-            fig.add_bar(x=w["date"], y=w["rain_mm"], name="Rainfall (mm)", marker_color="rgba(76,201,240,.75)",
+            fig.add_bar(x=w["date"], y=w["rain_mm"], name=L("Rainfall (mm)", "மழைப்பொழிவு (மி.மீ)"), marker_color="rgba(76,201,240,.75)",
                         text=w["rain_mm"], textposition="outside", secondary_y=True)
         if view in ("Combined", "Temperature"):
-            fig.add_scatter(x=w["date"], y=w["tmax_c"], name="Max Temp (°C)", mode="lines+markers+text", line=dict(color="#ff6b6b", width=3),
+            fig.add_scatter(x=w["date"], y=w["tmax_c"], name=L("Max Temp (°C)", "அதிகபட்ச வெப்பம் (°C)"), mode="lines+markers+text", line=dict(color="#ff6b6b", width=3),
                             text=w["tmax_c"].round(0).astype(int).astype(str) + "°", textposition="top center", secondary_y=False)
-            fig.add_scatter(x=w["date"], y=w["tmin_c"], name="Min Temp (°C)", mode="lines+markers+text", line=dict(color="#4cc9f0", width=3),
+            fig.add_scatter(x=w["date"], y=w["tmin_c"], name=L("Min Temp (°C)", "குறைந்தபட்ச வெப்பம் (°C)"), mode="lines+markers+text", line=dict(color="#4cc9f0", width=3),
                             text=w["tmin_c"].round(0).astype(int).astype(str) + "°", textposition="bottom center", secondary_y=False)
-        fig.update_yaxes(title_text="Temperature (°C)", secondary_y=False, range=[min(15, float(w["tmin_c"].min()) - 3), float(w["tmax_c"].max()) + 5])
-        fig.update_yaxes(title_text="Rainfall (mm)", secondary_y=True, rangemode="tozero", showgrid=False)
+        fig.update_yaxes(title_text=L("Temperature (°C)", "வெப்பநிலை (°C)"), secondary_y=False, range=[min(15, float(w["tmin_c"].min()) - 3), float(w["tmax_c"].max()) + 5])
+        fig.update_yaxes(title_text=L("Rainfall (mm)", "மழைப்பொழிவு (மி.மீ)"), secondary_y=True, rangemode="tozero", showgrid=False)
         fig.update_xaxes(tickformat="%d %b<br>%a")
-        st.plotly_chart(style_fig(fig, height=360), use_container_width=True, key="fc_chart")
+        st.plotly_chart(style_fig(fig, height=360), width="stretch", key="fc_chart")
     with right, st.container(border=True):
-        card_title("🔔", "Weather Alerts (Next 7 Days)")
+        card_title("🔔", L("Weather Alerts (Next 7 Days)", "வானிலை எச்சரிக்கைகள் (அடுத்த 7 நாட்கள்)"))
         alerts = build_alerts()
         st.markdown("".join(alert_html(a) for a in alerts[:4]), unsafe_allow_html=True)
         if len(alerts) > 4:
-            with st.expander(f"View all ({len(alerts)})"):
+            with st.expander(L(f"View all ({len(alerts)})", f"அனைத்தையும் காண்க ({len(alerts)})")):
                 st.markdown("".join(alert_html(a) for a in alerts[4:]), unsafe_allow_html=True)
 
 
 def render_trends_row():
     st.markdown('<div id="sec-trends"></div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1.15, 1.15, 1])
-    hist, monthly = load_hist(), load_monthly()
+    hist, monthly = load_hist(lat, lon), format_monthly_df(load_monthly(lat, lon))
+    legend_map = get_trend_legend_map()
+
     with c1, st.container(border=True):
-        card_title("📈", "Climate Trends", "Historical NASA POWER data · Thoothukudi")
+        card_title("📈", L("Climate Trends", "காலநிலை போக்குகள்"),
+                   f"{L('Historical climate data', 'வரலாற்று காலநிலை தரவு')} · {loc_name}")
         if hist is None:
-            st.info("Historical features not found. Run build_features.py first.")
+            st.info(L("Historical features not found. Run build_features.py first.", "வரலாற்றுத் தரவுகள் கிடைக்கவில்லை. முதலில் build_features.py-ஐ இயக்கவும்."))
         else:
-            mode = st.radio("Trend", ["Temperature", "Rainfall"], horizontal=True, key="trend_mode")
+            mode = st.radio("Trend", ["Temperature", "Rainfall"],
+                            format_func=lambda m: ("வெப்பநிலை" if m == "Temperature" else "மழைப்பொழிவு") if is_ta() else m,
+                            horizontal=True, key="trend_mode")
             if mode == "Temperature":
-                cols = [c for c in ["avg_temp_c", "max_temp_7day_c", "min_temp_7day_c"] if c in hist.columns]
-                f = px.line(hist, x="date", y=cols, labels={"value": "°C", "date": ""}) if cols else go.Figure()
+                raw_cols = [c for c in ["avg_temp_c", "max_temp_7day_c", "min_temp_7day_c"] if c in hist.columns]
+                if raw_cols:
+                    plot_df = hist.rename(columns=legend_map)
+                    nice_cols = [legend_map[c] for c in raw_cols]
+                    f = px.line(plot_df, x="date", y=nice_cols, labels={"value": "°C", "date": "", "variable": ""})
+                else:
+                    f = go.Figure()
             else:
-                f = px.area(hist, x="date", y="rain_7day_mm", labels={"rain_7day_mm": "mm", "date": ""}) if "rain_7day_mm" in hist else go.Figure()
-            st.plotly_chart(style_fig(f, height=270), use_container_width=True, key="trend_chart")
+                if "rain_7day_mm" in hist:
+                    rain_col_name = legend_map["rain_7day_mm"]
+                    plot_df = hist.rename(columns={"rain_7day_mm": rain_col_name})
+                    f = px.area(plot_df, x="date", y=rain_col_name, labels={rain_col_name: "mm", "date": ""})
+                    f.update_traces(name=rain_col_name, showlegend=True)
+                else:
+                    f = go.Figure()
+            st.plotly_chart(style_fig(f, height=270), width="stretch", key="trend_chart")
+
     with c2, st.container(border=True):
-        card_title("🌧️", "Monthly Rainfall", "From monthly_climate_summary.csv")
+        card_title("🌧️", L("Monthly Rainfall", "மாதாந்திர மழைப்பொழிவு"),
+                   f"{L('Monthly average', 'மாதாந்திர சராசரி')} · {loc_name}")
         if monthly is not None and "total_rainfall_mm" in monthly:
-            f = px.bar(monthly, x="month", y="total_rainfall_mm", labels={"total_rainfall_mm": "Rainfall (mm)", "month": ""},
+            f = px.bar(monthly, x="month_label", y="total_rainfall_mm",
+                       labels={"total_rainfall_mm": L("Rainfall (mm)", "மழை (மி.மீ)"), "month_label": ""},
                        color="total_rainfall_mm", color_continuous_scale=["#1f6f8b", "#4cc9f0"])
             f.update_coloraxes(showscale=False)
-            st.plotly_chart(style_fig(f, height=300), use_container_width=True, key="monthly_chart")
+            st.plotly_chart(style_fig(f, height=300), width="stretch", key="monthly_chart")
         else:
-            st.info("Monthly summary not found. Run analyze_weather.py to generate it.")
+            st.info(L("Monthly summary not found. Run analyze_weather.py to generate it.", "மாதாந்திர சுருக்கம் கிடைக்கவில்லை. analyze_weather.py-ஐ இயக்கவும்."))
+
     with c3, st.container(border=True):
         st.markdown('<div id="sec-suit"></div>', unsafe_allow_html=True)
-        card_title("🎯", "Sowing Suitability")
+        card_title("🎯", L("Sowing Suitability", "விதைப்பு உகந்த தன்மை"))
         if best is None:
-            st.warning("Not enough data.")
+            st.warning(L("Not enough data.", "போதுமான தரவு இல்லை."))
         else:
-            st.plotly_chart(donut(int(best["Suitability score"])), use_container_width=True, key="donut")
-            bar_rows([("Rainfall", int(best["Rain score"])), ("Temperature", int(best["Temp score"])),
-                      ("Dry-spell control", int(best["Dry score"])), ("Excess-rain safety", int(best["Excess score"]))])
+            st.plotly_chart(donut(int(best["Suitability score"])), width="stretch", key="donut")
+            bar_rows([(L("Rainfall", "மழைப்பொழிவு"), int(best["Rain score"])),
+                      (L("Temperature", "வெப்பநிலை"), int(best["Temp score"])),
+                      (L("Dry-spell control", "வறட்சி கட்டுப்பாடு"), int(best["Dry score"])),
+                      (L("Excess-rain safety", "அதிக மழை பாதுகாப்பு"), int(best["Excess score"]))])
 
 
 def reco_banner():
     if best is None:
         return
-    st.markdown(f'<div class="reco"><div class="rt">🌱 Recommended Sowing Window</div>'
+    st.markdown(f'<div class="reco"><div class="rt">{L("🌱 Recommended Sowing Window", "🌱 பரிந்துரைக்கப்படும் விதைப்பு காலம்")}</div>'
                 f'<div class="rd">{best["Start"]:%d %b %Y} – {best["End"]:%d %b %Y}</div>'
-                f'<div class="rs">Rule-based score on current weather data · not a confirmed agronomic date</div></div>', unsafe_allow_html=True)
+                f'<div class="rs">{L("Rule-based score on current weather data · not a confirmed agronomic date", "தற்போதைய வானிலை தரவுகளின் அடிப்படையிலான மதிப்பீடு · வேளாண் அதிகாரிகளிடம் உறுதிப்படுத்தவும்")}</div></div>', unsafe_allow_html=True)
 
 
 def render_recommendation():
     st.markdown('<div id="sec-reco"></div>', unsafe_allow_html=True)
-    st.markdown("### 🌱 AI Sowing Recommendation")
+    st.markdown(f"### {L('🌱 AI Sowing Recommendation', '🌱 AI விதைப்பு பரிந்துரை')}")
     if result.empty:
-        st.warning("Not enough daily weather data to evaluate a 7-day window.")
+        st.warning(L("Not enough daily weather data to evaluate a 7-day window.", "7-நாள் காலத்தை மதிப்பிடுவதற்கு போதுமான வானிலை தரவு இல்லை."))
         return
-    kpi_row([("Suitability score", f"{int(best['Suitability score'])}/100", "Top candidate", True),
-             ("Recommended window", f"{best['Start']:%d %b} – {best['End']:%d %b}", "7-day period"),
-             ("7-day rainfall", f"{best['Rainfall (mm)']} mm", f"{int(best['Rainy days'])} rainy days"),
-             ("Avg temperature", f"{best['Average temperature (°C)']} °C", f"Ideal {CI['temp_ideal']} °C")])
-    t1, t2, t3, t4 = st.tabs(["Summary", "Why this window", "Compare windows", "Experimental ML"])
+    kpi_row([(L("Suitability score", "உகந்த மதிப்பெண்"), f"{int(best['Suitability score'])}/100", L("Top candidate", "சிறந்த தேர்வு"), True),
+             (L("Recommended window", "பரிந்துரைக்கப்பட்ட காலம்"), f"{best['Start']:%d %b} – {best['End']:%d %b}", L("7-day period", "7-நாள் காலம்")),
+             (L("7-day rainfall", "7-நாள் மழைப்பொழிவு"), f"{best['Rainfall (mm)']} mm", f"{int(best['Rainy days'])} {L('rainy days', 'மழை நாட்கள்')}"),
+             (L("Avg temperature", "சராசரி வெப்பநிலை"), f"{best['Average temperature (°C)']} °C", f"{L('Ideal', 'உகந்தது')} {CI['temp_ideal']} °C")])
+    t1, t2, t3, t4 = st.tabs([L("Summary", "சுருக்கம்"), L("Why this window", "ஏன் இந்த காலம்?"),
+                              L("Compare windows", "காலங்களை ஒப்பிடு"), L("Experimental ML", "சோதனை ML மாதிரி")])
     with t1:
-        st.success(f"Primary candidate: {best['Start']:%d %B} – {best['End']:%d %B} · Score {int(best['Suitability score'])}/100")
+        st.success(L(f"Primary candidate: {best['Start']:%d %B} – {best['End']:%d %B} · Score {int(best['Suitability score'])}/100",
+                     f"முதன்மை தேர்வு: {best['Start']:%d %B} – {best['End']:%d %B} · மதிப்பெண் {int(best['Suitability score'])}/100"))
         if second is not None:
-            st.info(f"Alternative candidate: {second['Start']:%d %B} – {second['End']:%d %B} · Score {int(second['Suitability score'])}/100")
+            st.info(L(f"Alternative candidate: {second['Start']:%d %B} – {second['End']:%d %B} · Score {int(second['Suitability score'])}/100",
+                      f"மாற்றுத் தேர்வு: {second['Start']:%d %B} – {second['End']:%d %B} · மதிப்பெண் {int(second['Suitability score'])}/100"))
         risks = best["Risks"].split("; ")
-        chips(risks, "ok" if risks[0].startswith("No major") else "warn")
-        st.caption("This is the highest-ranked candidate in the available data, not a confirmed agronomic sowing date.")
+        chips(risks, "ok" if (risks[0].startswith("No major") or risks[0].startswith("முக்கிய")) else "warn")
+        st.caption(L("This is the highest-ranked candidate in the available data, not a confirmed agronomic sowing date.",
+                     "இது கிடைக்கக்கூடிய தரவுகளில் அதிக மதிப்பெண் பெற்ற காலமாகும்; உறுதிப்படுத்தப்பட்ட வேளாண் விதைப்பு தேதி அல்ல."))
     with t2:
         r = []
-        r.append(("ok", "✔ Estimated 7-day rainfall meets the prototype's minimum threshold.") if float(best["Rainfall (mm)"]) >= CI["rain_min"]
-                 else ("warn", "⚠ Rainfall is below the minimum threshold; moisture stress may be a concern."))
-        r.append(("ok", "✔ Average temperature is near the crop's configured ideal.") if abs(float(best["Average temperature (°C)"]) - CI["temp_ideal"]) <= 3
-                 else ("warn", "⚠ Average temperature differs from the crop's configured ideal."))
-        r.append(("warn", "⚠ A long dry spell is detected in this candidate window.") if int(best["Longest dry spell (days)"]) >= 5
-                 else ("ok", "✔ The longest dry spell is relatively short in this window."))
-        for k, t in r:
-            chips([t], k)
+        r.append(("ok", L("✔ Estimated 7-day rainfall meets the prototype's minimum threshold.", "✔ 7-நாள் மழைப்பொழிவு குறைந்தபட்ச தேவையை பூர்த்தி செய்கிறது."))
+                 if float(best["Rainfall (mm)"]) >= CI["rain_min"]
+                 else ("warn", L("⚠ Rainfall is below the minimum threshold; moisture stress may be a concern.", "⚠ மழைப்பொழிவு குறைந்தபட்ச அளவை விடக் குறைவாக உள்ளது; ஈரப்பதம் பற்றாக்குறை ஏற்படலாம்.")))
+        r.append(("ok", L("✔ Average temperature is near the crop's configured ideal.", "✔ சராசரி வெப்பநிலை பயிரின் உகந்த அளவிற்கு அருகில் உள்ளது."))
+                 if abs(float(best["Average temperature (°C)"]) - CI["temp_ideal"]) <= 3
+                 else ("warn", L("⚠ Average temperature differs from the crop's configured ideal.", "⚠ சராசரி வெப்பநிலை பயிரின் உகந்த அளவிலிருந்து மாறுபடுகிறது.")))
+        r.append(("warn", L("⚠ A long dry spell is detected in this candidate window.", "⚠ இந்த காலத்தில் நீண்ட வறட்சி கண்டறியப்பட்டுள்ளது."))
+                 if int(best["Longest dry spell (days)"]) >= 5
+                 else ("ok", L("✔ The longest dry spell is relatively short in this window.", "✔ இந்த காலத்தில் தொடர் வறட்சி நாட்கள் குறைவாகவே உள்ளன.")))
+        for k, t_txt in r:
+            chips([t_txt], k)
     with t3:
         cdf = result.head(10).copy()
         cdf["Window"] = cdf.apply(lambda x: f"{x['Start']:%d %b}–{x['End']:%d %b}", axis=1)
         f = px.bar(cdf, x="Window", y="Suitability score", range_y=[0, 100], color="Suitability score",
                    color_continuous_scale=["#ff7b72", "#f5c04a", "#65e6a0"], range_color=[0, 100],
+                   labels={"Window": L("Window", "காலம்"), "Suitability score": L("Suitability score", "உகந்த மதிப்பெண்")},
                    hover_data=["Rainfall (mm)", "Average temperature (°C)", "Longest dry spell (days)"])
         f.update_coloraxes(showscale=False)
-        st.plotly_chart(style_fig(f, title="Top candidate windows"), use_container_width=True, key="cmp_chart")
+        st.plotly_chart(style_fig(f, title=L("Top candidate windows", "சிறந்த விதைப்பு காலங்கள்")), width="stretch", key="cmp_chart")
     with t4:
         label, conf = predict_sowing_suitability(float(best["Rainfall (mm)"]), float(best["Average temperature (°C)"]), int(best["Longest dry spell (days)"]))
         if label is None:
-            st.warning("The demonstration model file was not found.")
+            st.warning(L("The demonstration model file was not found.", "மாதிரி AI கோப்பு (model file) கிடைக்கவில்லை."))
         else:
-            kpi_row([("Demo model output", label), ("Experimental score (not validated)", f"{conf:.1f}%")])
-        st.caption("The model was trained on synthetic demo data and is not validated for real-world agricultural decisions.")
+            kpi_row([(L("Demo model output", "மாதிரி AI முடிவு"), label),
+                     (L("Experimental score (not validated)", "சோதனை மதிப்பெண் (உறுதிப்படுத்தப்படாதது)"), f"{conf:.1f}%")])
+        st.caption(L("The model was trained on synthetic demo data and is not validated for real-world agricultural decisions.",
+                     "இந்த மாதிரி செயற்கை தரவுகளில் பயிற்சி அளிக்கப்பட்டது; நேரடி விவசாய முடிவுகளுக்கு உறுதிப்படுத்தப்படவில்லை."))
 
 
-# =====================================================================
-# PAGES
-# =====================================================================
-if page == "Dashboard":
-    kpi_row([("Forecast rainfall", f"{weather_total_rain:.1f} mm", f"{len(weather)} days"),
-             ("Average max temp", f"{avg_max_temp:.1f} °C"), ("Rainy days", rainy_days), ("Dry days", dry_days)])
-    render_current_weather()
-    render_forecast_and_alerts()
-    render_trends_row()
-    reco_banner()
-    st.markdown("---")
-    render_recommendation()
-    with st.expander("How this prototype works / limitations"):
-        st.write("It ranks rolling 7-day candidate windows using a transparent weighted score (rainfall 35%, temperature 30%, dry-spell 20%, excess-rain 15%). Forecast data may fall back to clearly labelled synthetic demo data. Crop thresholds are simplified placeholders and require local agronomic validation. Soil measurements and historical yield records are not included in the score.")
-
-elif page == "Sowing Recommendation":
-    page_header("Recommendation", "Sowing recommendation", f"{crop} · {district} · Soil: {soil}")
-    reco_banner()
-    render_recommendation()
-    st.markdown("### Crop thresholds used by this prototype")
-    kpi_row([("Minimum rainfall", f"{CI['rain_min']} mm"), ("Ideal rainfall", f"{CI['rain_ideal']} mm"),
-             ("Minimum temperature", f"{CI['temp_min']} °C"), ("Ideal temperature", f"{CI['temp_ideal']} °C")])
-    st.caption("These are illustrative thresholds, not validated local agricultural guidance.")
-
-elif page == "Weather & Climate":
-    page_header("Weather", "Weather & climate", f"{district} · {data_label}")
-    render_current_weather()
-    kpi_row([("Total rainfall", f"{weather_total_rain:.1f} mm"), ("Average maximum", f"{avg_max_temp:.1f} °C"),
-             ("Rainy days", rainy_days), ("Dry days", dry_days)])
-    render_forecast_and_alerts()
-    st.markdown("### Daily weather records")
-    disp = weather.copy()
-    disp["date"] = disp["date"].dt.strftime("%d %b %Y")
-    st.dataframe(disp, use_container_width=True, hide_index=True)
-
-elif page == "Crop Information":
-    page_header("Crops", "Crop information", "Prototype crop settings. Confirm variety-specific guidance with the local agriculture department.")
-    rows = [{"Crop": n, "Minimum rainfall (mm)": i["rain_min"], "Ideal rainfall (mm)": i["rain_ideal"], "Minimum temperature (°C)": i["temp_min"],
-             "Ideal temperature (°C)": i["temp_ideal"], "Waterlogging sensitive": i["waterlogging_sensitive"]} for n, i in CROPS.items()]
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-    st.markdown(f"### {crop}")
-    kpi_row([("Minimum rainfall", f"{CI['rain_min']} mm"), ("Ideal rainfall", f"{CI['rain_ideal']} mm"), ("Ideal temperature", f"{CI['temp_ideal']} °C")])
-    (st.warning if CI["waterlogging_sensitive"] else st.info)(
-        "The prototype marks this crop as waterlogging-sensitive. Check field drainage and local guidance." if CI["waterlogging_sensitive"]
-        else "The prototype does not flag this crop as waterlogging-sensitive.")
-
-elif page == "Soil Analysis":
-    page_header("Soil", "Soil analysis", "Soil type is captured as farm context; it does not currently change the suitability score.")
-    notes = {"Not specified": "Add a soil type or obtain a soil test for a more informed decision.",
-             "Clay": "Clay soils can retain more water; check drainage and avoid field operations when soil is excessively wet.",
-             "Loam": "Loam often balances water retention and drainage, but field conditions and soil tests still matter.",
-             "Sandy": "Sandy soils usually drain quickly; monitor moisture and irrigation availability.",
-             "Black soil": "Black soils can retain substantial moisture; check cracking, drainage and local crop guidance."}
-    st.info(f"**{soil}:** {notes[soil]}")
-    st.markdown("### What to record before sowing")
-    st.write("- Soil pH and electrical conductivity from a soil test\n- Available nitrogen, phosphorus and potassium\n- Drainage, field moisture and irrigation access")
-    st.warning("No laboratory soil measurements are collected by this prototype. These notes are general guidance, not a soil diagnosis.")
-
-elif page == "Climate Trends":
-    page_header("History", "Historical climate trends", "")
-    hist, monthly = load_hist(), load_monthly()
-    if hist is not None:
-        st.caption("Source label in project data: NASA POWER daily weather data · Thoothukudi, Tamil Nadu · 2024–2025")
-        items = [("Weather records", f"{len(hist):,}")]
-        if "avg_temp_c" in hist:
-            items.append(("Average temperature", f"{hist['avg_temp_c'].mean():.1f} °C"))
-        if "rain_7day_mm" in hist:
-            items.append(("Average 7-day rainfall", f"{hist['rain_7day_mm'].mean():.1f} mm"))
-        kpi_row(items)
-        cols = [c for c in ["avg_temp_c", "max_temp_7day_c", "min_temp_7day_c"] if c in hist.columns]
-        if cols:
-            st.plotly_chart(style_fig(px.line(hist, x="date", y=cols, labels={"value": "°C", "date": ""}), title="Temperature trend"), use_container_width=True, key="ct1")
-        if "rain_7day_mm" in hist:
-            st.plotly_chart(style_fig(px.area(hist, x="date", y="rain_7day_mm", labels={"rain_7day_mm": "mm", "date": ""}), title="7-day rainfall"), use_container_width=True, key="ct2")
-        st.download_button("Download historical climate features", hist.to_csv(index=False), file_name="sowing_window_features.csv", mime="text/csv")
-    else:
-        st.warning("Historical weather features not found. Run build_features.py first.")
-    if monthly is not None:
-        st.markdown("### Monthly climate analysis")
-        m1, m2 = st.columns(2)
-        if "average_temperature_c" in monthly:
-            m1.plotly_chart(style_fig(px.bar(monthly, x="month", y="average_temperature_c"), title="Average temperature by month"), use_container_width=True, key="ct3")
-        if "total_rainfall_mm" in monthly:
-            m2.plotly_chart(style_fig(px.bar(monthly, x="month", y="total_rainfall_mm"), title="Total rainfall by month"), use_container_width=True, key="ct4")
-        st.dataframe(monthly, use_container_width=True, hide_index=True)
-    else:
-        st.info("Monthly summary not found. Run analyze_weather.py to generate it.")
-
-elif page == "Insights & Alerts":
-    page_header("Insights", "Insights & alerts", "")
-    st.markdown("".join(alert_html(a) for a in build_alerts()), unsafe_allow_html=True)
-    if best is not None:
-        st.markdown("### Risk indicators for the top window")
-        kpi_row([("Rainfall (7 days)", f"{best['Rainfall (mm)']} mm"), ("Longest dry spell", f"{int(best['Longest dry spell (days)'])} day(s)"),
-                 ("Rainy days", int(best["Rainy days"]))])
-        risks = best["Risks"].split("; ")
-        chips(risks, "ok" if risks[0].startswith("No major") else "warn")
-    st.markdown("---")
-    st.markdown("### 🔮 Climate twin simulator")
-    st.write("Test hypothetical changes in rainfall and temperature. This does not predict actual future climate.")
+def render_simulator():
+    st.markdown(f"### {L('🔮 Climate twin simulator', '🔮 காலநிலை மாற்று சிமுலேட்டர்')}")
+    st.write(L("Test hypothetical changes in rainfall and temperature. This does not predict actual future climate.",
+               "மழை மற்றும் வெப்பநிலையில் ஏற்படும் மாற்றங்களை மாதிரியாகக் கொண்டு சோதித்துப் பாருங்கள். இது எதிர்கால வானிலை முன்னறிவிப்பு அல்ல."))
     x, y = st.columns(2)
-    rainfall_change = x.slider("Rainfall change (%)", -50, 50, 0, 5)
-    temperature_change = y.slider("Temperature change (°C)", -5.0, 5.0, 0.0, 0.5)
+    rainfall_change = x.slider(L("Rainfall change (%)", "மழைப்பொழிவு மாற்றம் (%)"), -50, 50, 0, 5)
+    temperature_change = y.slider(L("Temperature change (°C)", "வெப்பநிலை மாற்றம் (°C)"), -5.0, 5.0, 0.0, 0.5)
     sim = weather.copy()
     sim["rain_mm"] = (sim["rain_mm"] * (1 + rainfall_change / 100)).clip(lower=0)
     sim["tmax_c"] += temperature_change
@@ -887,35 +1281,207 @@ elif page == "Insights & Alerts":
     sim_score = int(sim_best["Suitability score"]) if sim_best is not None else 0
     orig = int(best["Suitability score"]) if best is not None else 0
     q1, q2, q3 = st.columns(3)
-    q1.metric("Original score", f"{orig}/100")
-    q2.metric("Simulated score", f"{sim_score}/100")
-    q3.metric("Score change", f"{sim_score - orig:+d}", delta=f"{sim_score - orig:+d} points")
+    q1.metric(L("Original score", "அசல் மதிப்பெண்"), f"{orig}/100")
+    q2.metric(L("Simulated score", "சிமுலேட்டர் மதிப்பெண்"), f"{sim_score}/100")
+    q3.metric(L("Score change", "மதிப்பெண் மாற்றம்"), f"{sim_score - orig:+d}", delta=f"{sim_score - orig:+d} {L('points', 'புள்ளிகள்')}")
     if sim_best is not None:
-        st.info(f"Under this hypothetical scenario, the top-ranked window is {sim_best['Start']} to {sim_best['End']}.")
-    st.caption("All simulator thresholds are illustrative and not validated for every crop or district.")
+        st.info(L(f"Under this hypothetical scenario, the top-ranked window is {sim_best['Start']} to {sim_best['End']}.",
+                  f"இந்த கற்பனை சூழலில், சிறந்த விதைப்பு காலம் {sim_best['Start']} முதல் {sim_best['End']} வரை ஆகும்."))
+    st.caption(L("All simulator thresholds are illustrative and not validated for every crop or district.",
+                 "சிமுலேட்டர் வரம்புகள் அனைத்தும் மாதிரி அளவுகளே."))
 
-elif page == "Export Data":
-    page_header("Export", "Export data", "Download the current candidate-window results and weather data.")
-    if not result.empty:
-        st.markdown("### Candidate sowing windows")
-        st.dataframe(result.head(20), use_container_width=True, hide_index=True)
-        st.download_button("⬇️ Download recommendation report (CSV)", result.to_csv(index=False).encode("utf-8"),
-                           file_name="sowingsense_recommendations.csv", mime="text/csv", type="primary")
-    st.markdown("### Weather data")
-    st.download_button("⬇️ Download weather data (CSV)", weather.to_csv(index=False).encode("utf-8"), file_name="sowingsense_weather.csv", mime="text/csv")
-    hist = load_hist()
-    if hist is not None:
-        st.download_button("⬇️ Download historical climate features", hist.to_csv(index=False).encode("utf-8"), file_name="sowing_window_features.csv", mime="text/csv")
-    st.info(f"Active source: {data_label}")
+
+# =====================================================================
+# PAGES (4 MAIN PAGES + 6 "MORE" PAGES)
+# =====================================================================
+if page == "Dashboard":
+    kpi_row([(L("Forecast rainfall", "முன்னறிவிப்பு மழை"), f"{weather_total_rain:.1f} mm", f"{len(weather)} {L('days', 'நாட்கள்')}"),
+             (L("Average max temp", "சராசரி அதிகபட்ச வெப்பம்"), f"{avg_max_temp:.1f} °C"),
+             (L("Rainy days", "மழை நாட்கள்"), rainy_days),
+             (L("Dry days", "வறண்ட நாட்கள்"), dry_days)])
+    render_current_weather()
+    render_forecast_and_alerts()
+    render_trends_row()
+    reco_banner()
+    st.markdown("---")
+    render_recommendation()
+    with st.expander(L("How this prototype works / limitations", "இந்த மாதிரி எவ்வாறு செயல்படுகிறது / வரம்புகள்")):
+        st.write(L(
+            "It ranks rolling 7-day candidate windows using a transparent weighted score (rainfall 35%, temperature 30%, dry-spell 20%, excess-rain 15%). Forecast data may fall back to clearly labelled synthetic demo data. Crop thresholds are simplified placeholders and require local agronomic validation. Soil measurements and historical yield records are not included in the score.",
+            "இது 7-நாள் வானிலை காலங்களை (மழைப்பொழிவு 35%, வெப்பநிலை 30%, வறட்சி கட்டுப்பாடு 20%, அதிக மழை பாதுகாப்பு 15%) அடிப்படையாகக் கொண்டு மதிப்பிடுகிறது. நேரடி வானிலை கிடைக்காதபோது செயற்கை மாதிரி தரவு பயன்படுத்தப்படும். பயிர் வரம்புகள் மாதிரி அளவுகளே என்பதால் உள்ளூர் வேளாண் அலுவலர்களின் ஆலோசனை அவசியம். மண் பரிசோதனை மற்றும் மகசூல் தரவுகள் இந்த மதிப்பெண்ணில் சேர்க்கப்படவில்லை."
+        ))
+
+elif page == "Sowing Recommendation":
+    page_header(L("Recommendation", "பரிந்துரை"), L("Sowing recommendation", "விதைப்பு பரிந்துரை"),
+                f"{crop_name} · {loc_name} · {L('Soil', 'மண்')}: {soil_name}")
+    reco_banner()
+    render_recommendation()
+    st.markdown(f"### {L('Crop thresholds used by this prototype', 'இந்த மாதிரியில் பயன்படுத்தப்படும் பயிர் வானிலை வரம்புகள்')}")
+    kpi_row([(L("Minimum rainfall", "குறைந்தபட்ச மழை"), f"{CI['rain_min']} mm"),
+             (L("Ideal rainfall", "உகந்த மழை"), f"{CI['rain_ideal']} mm"),
+             (L("Minimum temperature", "குறைந்தபட்ச வெப்பம்"), f"{CI['temp_min']} °C"),
+             (L("Ideal temperature", "உகந்த வெப்பம்"), f"{CI['temp_ideal']} °C")])
+    st.caption(L("These are illustrative thresholds, not validated local agricultural guidance.",
+                 "இவை மாதிரி வரம்புகள் மட்டுமே; உள்ளூர் வேளாண் துறையால் உறுதிப்படுத்தப்பட்ட வழிகாட்டுதல்கள் அல்ல."))
+
+elif page == "Insights & Alerts":
+    page_header(L("Insights", "நுண்ணறிவு"), L("Insights & alerts", "எச்சரிக்கைகள் & நுண்ணறிவு"), "")
+    st.markdown("".join(alert_html(a) for a in build_alerts()), unsafe_allow_html=True)
+    if best is not None:
+        st.markdown(f"### {L('Risk indicators for the top window', 'சிறந்த விதைப்பு காலத்திற்கான இடர் குறிகாட்டிகள்')}")
+        kpi_row([(L("Rainfall (7 days)", "மழைப்பொழிவு (7 நாட்கள்)"), f"{best['Rainfall (mm)']} mm"),
+                 (L("Longest dry spell", "நீண்ட வறட்சி நாட்கள்"), f"{int(best['Longest dry spell (days)'])} {L('day(s)', 'நாட்கள்')}"),
+                 (L("Rainy days", "மழை நாட்கள்"), int(best["Rainy days"]))])
+        risks = best["Risks"].split("; ")
+        chips(risks, "ok" if (risks[0].startswith("No major") or risks[0].startswith("முக்கிய")) else "warn")
+    st.markdown("---")
+    render_simulator()
 
 elif page == "About":
-    page_header("About", "About SowingSense AI", "")
-    st.write("SowingSense AI is a climate-aware crop sowing recommendation prototype designed to explore how weather conditions may support sowing-window decisions.")
-    st.markdown("### Current capabilities")
-    st.write("- Open-Meteo current conditions and short-range forecast when available\n- Clearly labelled synthetic fallback data for offline demonstrations\n"
-             "- Crop-specific, rule-based ranking of rolling seven-day weather windows\n- Experimental ML model output, climate trends, risk alerts and CSV exports")
-    st.markdown("### Limitations")
-    st.warning("Scores are illustrative and are not a guarantee of yield or a substitute for local agricultural advice. Crop thresholds are simplified placeholders. The demo model was trained on synthetic data and requires validation with real agricultural data. Soil type is not currently used in the score.")
-    st.caption("SowingSense AI · Smarter Sowing. Healthier Tomorrow.")
+    page_header(L("About", "பற்றி"), L("About SowingSense AI", "SowingSense AI பற்றி"), "")
+    st.write(L("SowingSense AI is a climate-aware crop sowing recommendation prototype designed to explore how weather conditions may support sowing-window decisions.",
+               "SowingSense AI என்பது வானிலை மற்றும் காலநிலை தரவுகளின் அடிப்படையில் பயிர் விதைப்புக்கு ஏற்ற நாட்களைத் தேர்ந்தெடுக்க உதவும் ஒரு மாதிரித் தளமாகும்."))
+    st.markdown(f"### {L('Current capabilities', 'தற்போதைய சிறப்பம்சங்கள்')}")
+    st.write(L(
+        "- Open-Meteo current conditions and short-range forecast when available\n- Clearly labelled synthetic fallback data for offline demonstrations\n- Crop-specific, rule-based ranking of rolling seven-day weather windows\n- Experimental ML model output, climate trends, risk alerts and CSV exports",
+        "- Open-Meteo மூலம் நிகழ்நேர வானிலை மற்றும் குறுகிய கால முன்னறிவிப்பு\n- ஆஃப்லைன் பயன்பாட்டிற்குத் தெளிவாகக் குறிப்பிடப்பட்ட செயற்கை மாதிரி தரவு\n- ஒவ்வொரு பயிருக்கும் ஏற்ற 7-நாள் வானிலை காலங்களை தரவரிசைப்படுத்தும் முறை\n- சோதனை ML மாதிரி முடிவுகள், காலநிலை போக்குகள், வானிலை எச்சரிக்கைகள் மற்றும் CSV பதிவிறக்கம்"
+    ))
+    st.markdown(f"### {L('Limitations', 'வரம்புகள்')}")
+    st.warning(L("Scores are illustrative and are not a guarantee of yield or a substitute for local agricultural advice. Crop thresholds are simplified placeholders. The demo model was trained on synthetic data and requires validation with real agricultural data. Soil type is not currently used in the score.",
+                 "இதில் உள்ள மதிப்பெண்கள் மாதிரி அளவுகளே; இவை மகசூலுக்கான உத்தரவாதமோ அல்லது உள்ளூர் வேளாண் நிபுணர்களின் ஆலோசனைக்கு மாற்றோ அல்ல. மண் வகை தற்போது மதிப்பெண் கணக்கீட்டில் சேர்க்கப்படவில்லை."))
+    st.caption(L("SowingSense AI · Smarter Sowing. Healthier Tomorrow.", "SowingSense AI · திறமையான விதைப்பு. வளமான எதிர்காலம்."))
 
-st.markdown('<div class="foot">🌱 SowingSense AI · Prototype only — verify advice with local agricultural experts.</div>', unsafe_allow_html=True)
+elif page == "Weather & Climate":
+    page_header(L("Weather", "வானிலை"), L("Weather & climate", "வானிலை மற்றும் காலநிலை"), f"{loc_name} · {data_label}")
+    render_current_weather()
+    kpi_row([(L("Total rainfall", "மொத்த மழைப்பொழிவு"), f"{weather_total_rain:.1f} mm"),
+             (L("Average maximum", "சராசரி அதிகபட்ச வெப்பம்"), f"{avg_max_temp:.1f} °C"),
+             (L("Rainy days", "மழை நாட்கள்"), rainy_days),
+             (L("Dry days", "வறண்ட நாட்கள்"), dry_days)])
+    render_forecast_and_alerts()
+    st.markdown(f"### {L('Daily weather records', 'தினசரி வானிலை பதிவுகள்')}")
+    disp = weather.copy()
+    disp["date"] = disp["date"].dt.strftime("%d %b %Y")
+    if is_ta():
+        disp = disp.rename(columns={"date": "தேதி", "rain_mm": "மழை (மி.மீ)", "tmax_c": "அதிகபட்ச வெப்பம் (°C)", "tmin_c": "குறைந்தபட்ச வெப்பம் (°C)"})
+    st.dataframe(disp, width="stretch", hide_index=True)
+
+elif page == "Crop Information":
+    page_header(L("Crops", "பயிர்கள்"), L("Crop information", "பயிர் தகவல்கள்"),
+                L("Prototype crop settings. Confirm variety-specific guidance with the local agriculture department.",
+                  "மாதிரி பயிர் அமைப்புகள். பயிர் ரகத்திற்கு ஏற்ற வழிகாட்டுதலை உள்ளூர் வேளாண் துறையிடம் உறுதிப்படுத்தவும்."))
+    rows = [{
+        L("Crop", "பயிர்"): CROP_TA.get(n, n) if is_ta() else n,
+        L("Minimum rainfall (mm)", "குறைந்தபட்ச மழை (மி.மீ)"): i["rain_min"],
+        L("Ideal rainfall (mm)", "உகந்த மழை (மி.மீ)"): i["rain_ideal"],
+        L("Minimum temperature (°C)", "குறைந்தபட்ச வெப்பம் (°C)"): i["temp_min"],
+        L("Ideal temperature (°C)", "உகந்த வெப்பம் (°C)"): i["temp_ideal"],
+        L("Waterlogging sensitive", "நீர் தேக்கத்தால் பாதிப்பு"): (L("Yes", "ஆம்") if i["waterlogging_sensitive"] else L("No", "இல்லை")) if is_ta() else i["waterlogging_sensitive"]
+    } for n, i in CROPS.items()]
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+    st.markdown(f"### {crop_name}")
+    kpi_row([(L("Minimum rainfall", "குறைந்தபட்ச மழை"), f"{CI['rain_min']} mm"),
+             (L("Ideal rainfall", "உகந்த மழை"), f"{CI['rain_ideal']} mm"),
+             (L("Ideal temperature", "உகந்த வெப்பம்"), f"{CI['temp_ideal']} °C")])
+    (st.warning if CI["waterlogging_sensitive"] else st.info)(
+        L("The prototype marks this crop as waterlogging-sensitive. Check field drainage and local guidance.",
+          "இந்த பயிர் நீர் தேக்கத்தால் பாதிக்கப்படக்கூடியது எனக் குறிக்கப்பட்டுள்ளது. வயல் வடிகால் வசதியை சரிபார்க்கவும்.")
+        if CI["waterlogging_sensitive"]
+        else L("The prototype does not flag this crop as waterlogging-sensitive.",
+               "இந்த பயிர் நீர் தேக்கத்தால் எளிதில் பாதிக்கப்படாது எனக் குறிக்கப்பட்டுள்ளது.")
+    )
+
+elif page == "Soil Analysis":
+    page_header(L("Soil", "மண்"), L("Soil analysis", "மண் பகுப்பாய்வு"),
+                L("Soil type is captured as farm context; it does not currently change the suitability score.",
+                  "மண் வகை பண்ணைத் தகவலுக்காகப் பெறப்படுகிறது; இது தற்போது விதைப்பு மதிப்பெண்ணை மாற்றுவதில்லை."))
+    notes_en = {
+        "Not specified": "Add a soil type or obtain a soil test for a more informed decision.",
+        "Clay": "Clay soils can retain more water; check drainage and avoid field operations when soil is excessively wet.",
+        "Loam": "Loam often balances water retention and drainage, but field conditions and soil tests still matter.",
+        "Sandy": "Sandy soils usually drain quickly; monitor moisture and irrigation availability.",
+        "Black soil": "Black soils can retain substantial moisture; check cracking, drainage and local crop guidance.",
+    }
+    notes_ta = {
+        "Not specified": "சிறந்த முடிவுக்கு மண் வகையைத் தேர்ந்தெடுக்கவும் அல்லது மண் பரிசோதனை செய்யவும்.",
+        "Clay": "களிமண் நீரை அதிகம் தக்கவைக்கும்; வடிகால் வசதியை சரிபார்க்கவும் மற்றும் மண் அதிக ஈரமாக இருக்கும்போது உழவுப் பணிகளைத் தவிர்க்கவும்.",
+        "Loam": "வண்டல் மண் நீர் பிடிப்பு மற்றும் வடிகால் வசதியை சமநிலையில் வைத்திருக்கும்; எனினும் மண் பரிசோதனை அவசியம்.",
+        "Sandy": "மணல் மண் நீரை விரைவாக வடியச் செய்யும்; ஈரப்பதம் மற்றும் நீர்ப்பாசன வசதியைக் கண்காணிக்கவும்.",
+        "Black soil": "கரிசல் மண் அதிக ஈரப்பதத்தைத் தக்கவைக்கும்; மண் வெடிப்பு, வடிகால் மற்றும் உள்ளூர் பயிர் ஆலோசனையைப் பின்பற்றவும்.",
+    }
+    st.info(f"**{soil_name}:** {(notes_ta if is_ta() else notes_en)[soil]}")
+    st.markdown(f"### {L('What to record before sowing', 'விதைப்புக்கு முன் கவனிக்க வேண்டியவை')}")
+    st.write(L(
+        "- Soil pH and electrical conductivity from a soil test\n- Available nitrogen, phosphorus and potassium\n- Drainage, field moisture and irrigation access",
+        "- மண் பரிசோதனை மூலம் மண்ணின் கார-அமிலத் தன்மை (pH) மற்றும் மின் கடத்துத்திறன் (EC)\n- மண்ணில் உள்ள தழைச்சத்து (N), மணிச்சத்து (P), சாம்பல் சத்து (K) அளவு\n- வடிகால் வசதி, மண்ணின் ஈரப்பதம் மற்றும் பாசன நீர் இருப்பு"
+    ))
+    st.warning(L("No laboratory soil measurements are collected by this prototype. These notes are general guidance, not a soil diagnosis.",
+                 "இந்த மாதிரியில் ஆய்வக மண் பரிசோதனை அளவீடுகள் சேகரிக்கப்படவில்லை. இவை பொதுவான வழிகாட்டுதல்களே."))
+
+elif page == "Climate Trends":
+    page_header(L("History", "வரலாறு"), L("Historical climate trends", "வரலாற்று காலநிலை போக்குகள்"), f"{loc_name}")
+    hist, monthly = load_hist(lat, lon), format_monthly_df(load_monthly(lat, lon))
+    legend_map = get_trend_legend_map()
+    if hist is not None:
+        st.caption(f"{L('Historical daily weather data · 2024–2025', 'வரலாற்று தினசரி வானிலை தரவு · 2024–2025')} · {loc_name}")
+        items = [(L("Weather records", "வானிலை பதிவுகள்"), f"{len(hist):,}")]
+        if "avg_temp_c" in hist:
+            items.append((L("Average temperature", "சராசரி வெப்பநிலை"), f"{hist['avg_temp_c'].mean():.1f} °C"))
+        if "rain_7day_mm" in hist:
+            items.append((L("Average 7-day rainfall", "சராசரி 7-நாள் மழை"), f"{hist['rain_7day_mm'].mean():.1f} mm"))
+        kpi_row(items)
+        raw_cols = [c for c in ["avg_temp_c", "max_temp_7day_c", "min_temp_7day_c"] if c in hist.columns]
+        if raw_cols:
+            plot_df = hist.rename(columns=legend_map)
+            nice_cols = [legend_map[c] for c in raw_cols]
+            st.plotly_chart(style_fig(px.line(plot_df, x="date", y=nice_cols, labels={"value": "°C", "date": "", "variable": ""}),
+                                      title=f"{L('Temperature trend', 'வெப்பநிலை போக்கு')} — {loc_name}"), width="stretch", key="ct1")
+        if "rain_7day_mm" in hist:
+            rain_col_name = legend_map["rain_7day_mm"]
+            plot_df = hist.rename(columns={"rain_7day_mm": rain_col_name})
+            st.plotly_chart(style_fig(px.area(plot_df, x="date", y=rain_col_name, labels={rain_col_name: "mm", "date": ""}),
+                                      title=f"{L('7-day rainfall', '7-நாள் மழைப்பொழிவு')} — {loc_name}"), width="stretch", key="ct2")
+        st.download_button(L("Download historical climate features", "வரலாற்று காலநிலை தரவுகளைப் பதிவிறக்கு (CSV)"),
+                           hist.to_csv(index=False), file_name="sowing_window_features.csv", mime="text/csv")
+    else:
+        st.warning(L("Historical weather features not found. Run build_features.py first.",
+                     "வரலாற்று வானிலை தரவுகள் கிடைக்கவில்லை. முதலில் build_features.py-ஐ இயக்கவும்."))
+    if monthly is not None:
+        st.markdown(f"### {L('Monthly climate analysis', 'மாதாந்திர காலநிலை பகுப்பாய்வு')} — {loc_name}")
+        m1, m2 = st.columns(2)
+        if "average_temperature_c" in monthly:
+            m1.plotly_chart(style_fig(px.bar(monthly, x="month_label", y="average_temperature_c",
+                                             labels={"month_label": "", "average_temperature_c": L("Avg Temp (°C)", "சராசரி வெப்பம் (°C)")}),
+                                      title=L("Average temperature by month", "மாதாந்திர சராசரி வெப்பநிலை")), width="stretch", key="ct3")
+        if "total_rainfall_mm" in monthly:
+            m2.plotly_chart(style_fig(px.bar(monthly, x="month_label", y="total_rainfall_mm",
+                                             labels={"month_label": "", "total_rainfall_mm": L("Rainfall (mm)", "மழை (மி.மீ)")}),
+                                      title=L("Total rainfall by month", "மாதாந்திர மொத்த மழைப்பொழிவு")), width="stretch", key="ct4")
+        disp_m = monthly.drop(columns=["month_label"], errors="ignore")
+        st.dataframe(disp_m, width="stretch", hide_index=True)
+    else:
+        st.info(L("Monthly summary not found. Run analyze_weather.py to generate it.",
+                  "மாதாந்திர சுருக்கம் கிடைக்கவில்லை. analyze_weather.py-ஐ இயக்கவும்."))
+
+elif page == "Climate Twin Simulator":
+    page_header(L("Simulator", "சிமுலேட்டர்"), L("Climate Twin Simulator — What-If Analysis", "காலநிலை மாற்று சிமுலேட்டர்"), f"{crop_name} · {loc_name}")
+    render_simulator()
+
+elif page == "Export Data":
+    page_header(L("Export", "பதிவிறக்கம்"), L("Export data", "தரவு பதிவிறக்கம்"),
+                L("Download the current candidate-window results and weather data.", "தற்போதைய விதைப்பு பரிந்துரை மற்றும் வானிலை தரவுகளைப் பதிவிறக்கவும்."))
+    if not result.empty:
+        st.markdown(f"### {L('Candidate sowing windows', 'பரிந்துரைக்கப்படும் விதைப்பு காலங்கள்')}")
+        st.dataframe(result.head(20), width="stretch", hide_index=True)
+        st.download_button(L("⬇️ Download recommendation report (CSV)", "⬇️ பரிந்துரை அறிக்கையைப் பதிவிறக்கு (CSV)"),
+                           result.to_csv(index=False).encode("utf-8"), file_name="sowingsense_recommendations.csv", mime="text/csv", type="primary")
+    st.markdown(f"### {L('Weather data', 'வானிலை தரவு')}")
+    st.download_button(L("⬇️ Download weather data (CSV)", "⬇️ வானிலை தரவைப் பதிவிறக்கு (CSV)"),
+                       weather.to_csv(index=False).encode("utf-8"), file_name="sowingsense_weather.csv", mime="text/csv")
+    hist = load_hist(lat, lon)
+    if hist is not None:
+        st.download_button(L("⬇️ Download historical climate features", "⬇️ வரலாற்று காலநிலை தரவைப் பதிவிறக்கு (CSV)"),
+                           hist.to_csv(index=False).encode("utf-8"), file_name="sowing_window_features.csv", mime="text/csv")
+    st.info(f"{L('Active source', 'தற்போதைய தரவு மூலம்')}: {data_label}")
+
+st.markdown(f'<div class="foot">{L("🌱 SowingSense AI · Prototype only — verify advice with local agricultural experts.", "🌱 SowingSense AI · மாதிரி அமைப்பு மட்டுமே — உள்ளூர் வேளாண் நிபுணர்களிடம் ஆலோசனை பெறவும்.")}</div>', unsafe_allow_html=True)
