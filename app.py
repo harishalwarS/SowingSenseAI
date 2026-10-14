@@ -11,6 +11,11 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
+try:  # pip install streamlit-geolocation
+    from streamlit_geolocation import streamlit_geolocation
+except ImportError:
+    streamlit_geolocation = None
+
 DATA_DIR = Path(__file__).parent / "Data"
 WEATHER_FEATURES_PATH = DATA_DIR / "sowing_window_features.csv"
 MONTHLY_PATH = DATA_DIR / "monthly_climate_summary.csv"
@@ -359,6 +364,19 @@ def fetch_current_weather(lat, lon):
     return cur
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def reverse_geocode(lat, lon):
+    """Turn GPS coordinates into a (place, state) label using OpenStreetMap Nominatim."""
+    import requests
+    r = requests.get("https://nominatim.openstreetmap.org/reverse",
+                     params={"lat": round(lat, 4), "lon": round(lon, 4), "format": "jsonv2", "zoom": 10},
+                     headers={"User-Agent": "SowingSenseAI/1.0"}, timeout=8)
+    r.raise_for_status()
+    a = r.json().get("address", {})
+    place = a.get("city") or a.get("town") or a.get("village") or a.get("county") or a.get("state_district") or "Your location"
+    return place, a.get("state", "")
+
+
 @st.cache_data(show_spinner=False)
 def load_hist():
     return pd.read_csv(WEATHER_FEATURES_PATH, parse_dates=["date"]) if WEATHER_FEATURES_PATH.exists() else None
@@ -484,7 +502,8 @@ if page == "Dashboard":
 with st.container(border=True):
     card_title("📍", "Select Farm Details", "Choose location, crop and analysis settings to get AI-powered sowing recommendations")
     fc = st.columns([1.2, 1.1, 1.5, 1.1, 1.1, 1.35])
-    district = fc[0].selectbox("District / Location", list(DISTRICTS.keys()), key="district")
+    district = fc[0].selectbox("District / Location", list(DISTRICTS.keys()), key="district",
+                               disabled=st.session_state.get("use_live_loc", False))
     crop = fc[1].selectbox("Crop", list(CROPS.keys()), key="crop")
     source = fc[2].selectbox("Climate data source", [SRC_LIVE, SRC_DEMO], key="source")
     start_day = fc[3].date_input("Start date for analysis", value=date.today(), key="start_day")
@@ -492,9 +511,30 @@ with st.container(border=True):
     fc[5].markdown("<div style='height:1.75rem'></div>", unsafe_allow_html=True)
     run = fc[5].button("🌱 Generate Recommendation", type="primary", use_container_width=True)
     auto_refresh = st.toggle("⚡ Auto-refresh live weather every 60 s", value=True, key="auto_refresh")
+    use_live_loc = st.toggle("📡 Use my live location (GPS)", value=False, key="use_live_loc")
+    if use_live_loc:
+        if streamlit_geolocation is None:
+            st.warning("Live location needs the `streamlit-geolocation` package. Run `pip install streamlit-geolocation` and restart the app.")
+        else:
+            st.caption("Click the button below and allow location access in your browser.")
+            g = streamlit_geolocation()
+            if g and g.get("latitude") is not None and g.get("longitude") is not None:
+                st.session_state["live_coords"] = (float(g["latitude"]), float(g["longitude"]), g.get("accuracy"))
+        if "live_coords" not in st.session_state:
+            st.info("Waiting for your location… using the selected district until it is shared.")
 
-lat, lon = DISTRICTS[district]
-config_key = (district, source, start_day)
+live_coords = st.session_state.get("live_coords") if use_live_loc else None
+if live_coords:
+    lat, lon = live_coords[0], live_coords[1]
+    try:
+        district, region = reverse_geocode(lat, lon)
+    except Exception:
+        district, region = "My live location", ""
+    region = region or "Live location"
+else:
+    lat, lon = DISTRICTS[district]
+    region = "Tamil Nadu"
+config_key = (district, source, start_day, round(lat, 3), round(lon, 3))
 stale = source == SRC_LIVE and (time.time() - st.session_state.get("fetched_at", 0)) > 900
 if run or stale or "weather_data" not in st.session_state or st.session_state.get("weather_config") != config_key:
     with st.spinner("Analysing climate data…"):
@@ -573,7 +613,9 @@ def render_current_weather():
             _card()
     with right, st.container(border=True):
         card_title("📍", "Location Information")
-        st.markdown(f"**{district}, Tamil Nadu**  \n<span class='small-note'>{lat:.4f}° N, {lon:.4f}° E</span>", unsafe_allow_html=True)
+        acc = f" · ±{float(live_coords[2]):.0f} m accuracy" if live_coords and live_coords[2] else ""
+        badge = "📡 " if live_coords else ""
+        st.markdown(f"**{badge}{district}, {region}**  \n<span class='small-note'>{lat:.4f}° N, {lon:.4f}° E{acc}</span>", unsafe_allow_html=True)
         try:
             mp = px.scatter_mapbox(pd.DataFrame({"lat": [lat], "lon": [lon], "n": [district]}), lat="lat", lon="lon", zoom=7, height=170)
             mp.update_traces(marker=dict(size=17, color=GREEN))
