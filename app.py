@@ -770,35 +770,139 @@ def max_consecutive_dry(values):
     return best
 
 
-def score_window(window, ci):
-    rain = float(window["rain_mm"].sum())
-    avg_temp = float(((window["tmax_c"] + window["tmin_c"]) / 2).mean())
-    rainy = int((window["rain_mm"] >= 1.0).sum())
-    dry_spell = max_consecutive_dry(window["rain_mm"].tolist())
-    rain_score = min(100, rain / ci["rain_ideal"] * 100)
-    if rain < ci["rain_min"]:
-        rain_score *= 0.55
-    temp_score = max(0, 100 - abs(avg_temp - ci["temp_ideal"]) * 8)
-    if avg_temp < ci["temp_min"]:
-        temp_score *= 0.6
-    dry_score = max(0, 100 - dry_spell * 12)
-    excess_score = max(20, 100 - max(0, rain - ci["rain_ideal"]) * 0.8)
-    score = round(0.35 * rain_score + 0.30 * temp_score + 0.20 * dry_score + 0.15 * excess_score)
-    risks = []
-    if rain < ci["rain_min"]:
-        risks.append(L("Rainfall may be insufficient", "மழைப்பொழிவு போதுமானதாக இல்லாமல் இருக்கலாம்"))
-    if dry_spell >= 5:
-        risks.append(L("Possible prolonged dry spell", "நீண்ட வறட்சி ஏற்பட வாய்ப்புள்ளது"))
-    if avg_temp > ci["temp_ideal"] + 3:
-        risks.append(L("Temperature may be high", "வெப்பநிலை அதிகமாக இருக்கலாம்"))
-    if rain > ci["rain_ideal"] * 1.4:
-        risks.append(L("Excess rainfall / waterlogging risk", "அதிக மழை / நீர் தேங்கும் அபாயம்"))
-    if not risks:
-        risks.append(L("No major risk flagged by this simple prototype", "முக்கிய அபாயம் எதுவும் கண்டறியப்படவில்லை"))
-    return {"score": int(max(0, min(100, score))), "rain_mm": round(rain, 1), "avg_temp": round(avg_temp, 1),
-            "dry_spell": dry_spell, "rainy_days": rainy, "risks": risks,
-            "parts": [int(round(rain_score)), int(round(temp_score)), int(round(dry_score)), int(round(excess_score))]}
 
+def score_window(window, ci):
+    """
+    Strict crop-specific sowing suitability score.
+    Rainfall thresholds are interpreted as 7-day totals.
+    Scores are heuristic and require agricultural validation.
+    """
+    rain = max(0.0, float(window["rain_mm"].sum()))
+
+    avg_temp = float(
+        ((window["tmax_c"] + window["tmin_c"]) / 2).mean()
+    )
+
+    rainy = int((window["rain_mm"] >= 1.0).sum())
+    dry_spell = max_consecutive_dry(
+        window["rain_mm"].tolist()
+    )
+
+    rain_min = float(ci["rain_min"])
+    rain_ideal = float(ci["rain_ideal"])
+    temp_min = float(ci["temp_min"])
+    temp_ideal = float(ci["temp_ideal"])
+
+    # 1. Rainfall: insufficient rain cannot receive a high score.
+    if rain_min <= 0 or rain_ideal <= rain_min:
+        rain_score = 0.0
+    elif rain < rain_min:
+        rain_score = 50.0 * rain / rain_min
+    elif rain <= rain_ideal:
+        rain_score = (
+            50.0
+            + 50.0 * (rain - rain_min)
+            / (rain_ideal - rain_min)
+        )
+    else:
+        # Penalize rainfall exceeding the crop's ideal amount.
+        rain_score = max(
+            0.0,
+            100.0 * (1.5 * rain_ideal - rain)
+            / (0.5 * rain_ideal)
+        )
+
+    # 2. Temperature: penalize conditions outside the
+    # minimum-to-ideal range and above the estimated upper limit.
+    # Prefer explicit, validated crop-specific maximum temperatures.
+    temp_max = temp_ideal + max(3.0, temp_ideal - temp_min)
+
+    if temp_max <= temp_ideal or temp_ideal <= temp_min:
+        temp_score = 0.0
+    elif temp_min <= avg_temp <= temp_ideal:
+        temp_score = (
+            100.0 * (avg_temp - temp_min)
+            / (temp_ideal - temp_min)
+        )
+    elif temp_ideal < avg_temp < temp_max:
+        temp_score = (
+            100.0 * (temp_max - avg_temp)
+            / (temp_max - temp_ideal)
+        )
+    else:
+        temp_score = 0.0
+
+    # 3. Dry-spell penalty.
+    dry_score = max(0.0, 100.0 - (dry_spell * 15.0))
+
+    # 4. Excess rainfall penalty.
+    excess_score = max(
+        0.0,
+        100.0 * (1.5 * rain_ideal - rain)
+        / (0.5 * rain_ideal)
+    ) if rain_ideal > 0 else 0.0
+
+    # Weighted score: all component scores are between 0 and 100.
+    score = round(
+        0.40 * rain_score
+        + 0.30 * temp_score
+        + 0.20 * dry_score
+        + 0.10 * excess_score
+    )
+
+    risks = []
+
+    if rain < rain_min:
+        risks.append(
+            L("Rainfall may be insufficient",
+              "மழைப்பொழிவு போதுமானதாக இல்லாமல் இருக்கலாம்")
+        )
+
+    if dry_spell >= 5:
+        risks.append(
+            L("Possible prolonged dry spell",
+              "நீண்ட வறட்சி ஏற்பட வாய்ப்புள்ளது")
+        )
+
+    if avg_temp < temp_min:
+        risks.append(
+            L("Temperature below the crop's minimum threshold",
+              "பயிருக்குத் தேவையான குறைந்தபட்ச வெப்பநிலைக்குக் கீழே உள்ளது")
+        )
+    elif avg_temp > temp_max:
+        risks.append(
+            L("Temperature exceeds the estimated upper threshold",
+              "மதிப்பிடப்பட்ட அதிகபட்ச வெப்பநிலையை வெப்பம் கடந்துள்ளது")
+        )
+
+    if rain > rain_ideal * 1.4:
+        risks.append(
+            L("Excess rainfall / waterlogging risk",
+              "அதிக மழை / நீர் தேங்கும் அபாயம்")
+        )
+
+    if not risks:
+        risks.append(
+            L("No major risk flagged by this screening method",
+              "இந்த ஆரம்ப மதிப்பீட்டில் முக்கிய அபாயம் கண்டறியப்படவில்லை")
+        )
+
+    parts = [
+        int(round(rain_score)),
+        int(round(temp_score)),
+        int(round(dry_score)),
+        int(round(excess_score)),
+    ]
+
+    return {
+        "score": max(0, min(100, score)),
+        "rain_mm": round(rain, 1),
+        "avg_temp": round(avg_temp, 1),
+        "dry_spell": dry_spell,
+        "rainy_days": rainy,
+        "risks": risks,
+        "parts": parts,
+    }
 
 def evaluate_windows(weather, ci):
     weather = weather.sort_values("date").reset_index(drop=True)
